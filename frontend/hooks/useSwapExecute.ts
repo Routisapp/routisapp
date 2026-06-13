@@ -1,0 +1,314 @@
+"use client";
+
+import { useState } from "react";
+import { useWriteContract, usePublicClient, useSendTransaction } from "wagmi";
+import { encodeFunctionData, erc20Abi, maxUint256 } from "viem";
+import { toast } from "sonner";
+import { insertSwapRecord, getReferrer, addReferralReward } from "@/lib/supabase";
+import { basescanTx, fetchTokenPrice } from "@/lib/utils";
+import type { SwapExecuteParams, SwapStatus } from "@/types/swap";
+import { DEX_ROUTERS } from "@/constants/dex-addresses";
+
+const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+const WETH       = "0x4200000000000000000000000000000000000006" as const;
+
+const WETH_ABI = [
+  { name: "deposit",  type: "function", stateMutability: "payable",    inputs: [],                                 outputs: [] },
+  { name: "withdraw", type: "function", stateMutability: "nonpayable", inputs: [{ name: "wad", type: "uint256" }], outputs: [] },
+] as const;
+
+const UNIV3_ROUTER_ABI = [
+  {
+    name: "exactInputSingle", type: "function", stateMutability: "payable",
+    inputs: [{ name: "params", type: "tuple", components: [
+      { name: "tokenIn",           type: "address" },
+      { name: "tokenOut",          type: "address" },
+      { name: "fee",               type: "uint24"  },
+      { name: "recipient",         type: "address" },
+      { name: "amountIn",          type: "uint256" },
+      { name: "amountOutMinimum",  type: "uint256" },
+      { name: "sqrtPriceLimitX96", type: "uint160" },
+    ]}],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  {
+    name: "unwrapWETH9", type: "function", stateMutability: "payable",
+    inputs: [{ name: "amountMinimum", type: "uint256" }, { name: "recipient", type: "address" }],
+    outputs: [],
+  },
+  {
+    name: "multicall", type: "function", stateMutability: "payable",
+    inputs: [{ name: "data", type: "bytes[]" }],
+    outputs: [{ name: "results", type: "bytes[]" }],
+  },
+] as const;
+
+const AERODROME_ROUTER_ABI = [
+  {
+    name: "swapExactTokensForTokens", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" }, { name: "amountOutMin", type: "uint256" },
+      { name: "routes", type: "tuple[]", components: [
+        { name: "from", type: "address" }, { name: "to", type: "address" },
+        { name: "stable", type: "bool" },  { name: "factory", type: "address" },
+      ]},
+      { name: "to", type: "address" }, { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    name: "swapExactETHForTokens", type: "function", stateMutability: "payable",
+    inputs: [
+      { name: "amountOutMin", type: "uint256" },
+      { name: "routes", type: "tuple[]", components: [
+        { name: "from", type: "address" }, { name: "to", type: "address" },
+        { name: "stable", type: "bool" },  { name: "factory", type: "address" },
+      ]},
+      { name: "to", type: "address" }, { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    name: "swapExactTokensForETH", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" }, { name: "amountOutMin", type: "uint256" },
+      { name: "routes", type: "tuple[]", components: [
+        { name: "from", type: "address" }, { name: "to", type: "address" },
+        { name: "stable", type: "bool" },  { name: "factory", type: "address" },
+      ]},
+      { name: "to", type: "address" }, { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+] as const;
+
+const SUSHI_ROUTER_ABI = [
+  {
+    name: "swapExactTokensForTokens", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" }, { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },   { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    name: "swapExactETHForTokens", type: "function", stateMutability: "payable",
+    inputs: [
+      { name: "amountOutMin", type: "uint256" }, { name: "path", type: "address[]" },
+      { name: "to", type: "address" },           { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    name: "swapExactTokensForETH", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" }, { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },   { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+] as const;
+
+const AERODROME_FACTORY = "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as const;
+
+function isWethEthPair(tokenIn: string, tokenOut: string): "wrap" | "unwrap" | null {
+  const a = tokenIn.toLowerCase();
+  const b = tokenOut.toLowerCase();
+  if (a === NATIVE_ETH.toLowerCase() && b === WETH.toLowerCase()) return "wrap";
+  if (a === WETH.toLowerCase() && b === NATIVE_ETH.toLowerCase()) return "unwrap";
+  return null;
+}
+
+export function useSwapExecute() {
+  const [status,  setStatus]  = useState<SwapStatus>("idle");
+  const [txHash,  setTxHash]  = useState<`0x${string}` | undefined>();
+  const { writeContractAsync }   = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
+  // usePublicClient uses the wallet's connected provider — no CORS issues
+  const walletClient = usePublicClient();
+
+  async function execute(params: SwapExecuteParams, userAddress: string) {
+    setStatus("swapping");
+    toast.loading("Sending transaction...", { id: "swap" });
+
+    const slippageBps  = BigInt(Math.round(params.slippage * 100));
+    const amountOutMin = params.quote.amountOut - (params.quote.amountOut * slippageBps) / 10000n;
+    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 60 * 20);
+
+    const isNativeIn  = params.tokenIn.toLowerCase()  === NATIVE_ETH.toLowerCase();
+    const isNativeOut = params.tokenOut.toLowerCase() === NATIVE_ETH.toLowerCase();
+    const tokenIn     = (isNativeIn  ? WETH : params.tokenIn)  as `0x${string}`;
+    const tokenOut    = (isNativeOut ? WETH : params.tokenOut) as `0x${string}`;
+    const wethOp      = isWethEthPair(params.tokenIn, params.tokenOut);
+
+    try {
+      let hash: `0x${string}`;
+
+      // ── ERC-20 Approve (skip for native ETH and wrap/unwrap) ─
+      if (!isNativeIn && wethOp === null && walletClient) {
+        const spender = (
+          params.quote.dex === "UNISWAP_V3"     ? DEX_ROUTERS.UNISWAP_V3     :
+          params.quote.dex === "PANCAKESWAP_V3" ? DEX_ROUTERS.PANCAKESWAP_V3 :
+          params.quote.dex === "AERODROME"      ? DEX_ROUTERS.AERODROME      :
+                                                   DEX_ROUTERS.SUSHISWAP
+        ) as `0x${string}`;
+
+        const allowance = await walletClient.readContract({
+          address:      tokenIn,
+          abi:          erc20Abi,
+          functionName: "allowance",
+          args:         [params.recipient as `0x${string}`, spender],
+        }) as bigint;
+
+        if (allowance < params.amountIn) {
+          toast.loading("Approving token...", { id: "swap" });
+          const approveTx = await writeContractAsync({
+            address:      tokenIn,
+            abi:          erc20Abi,
+            functionName: "approve",
+            args:         [spender, maxUint256],
+          });
+          await walletClient.waitForTransactionReceipt({ hash: approveTx });
+          toast.loading("Sending transaction...", { id: "swap" });
+        }
+      }
+
+      // ── WETH wrap / unwrap (direkt WETH contract, no router) ─
+      if (wethOp === "wrap") {
+        // deposit() — sendTransactionAsync bypasses simulation, no CORS
+        hash = await sendTransactionAsync({
+          to:    WETH,
+          data:  encodeFunctionData({ abi: WETH_ABI, functionName: "deposit" }),
+          value: params.amountIn,
+          gas:   60000n,
+        });
+
+      } else if (wethOp === "unwrap") {
+        // withdraw() — sendTransactionAsync bypasses simulation, no CORS
+        hash = await sendTransactionAsync({
+          to:   WETH,
+          data: encodeFunctionData({
+            abi:          WETH_ABI,
+            functionName: "withdraw",
+            args:         [params.amountIn],
+          }),
+          gas: 60000n,
+        });
+
+      // ── Uniswap V3 / PancakeSwap V3 ──────────────────────────
+      } else if (params.quote.dex === "UNISWAP_V3" || params.quote.dex === "PANCAKESWAP_V3") {
+        const router = (params.quote.dex === "UNISWAP_V3"
+          ? DEX_ROUTERS.UNISWAP_V3 : DEX_ROUTERS.PANCAKESWAP_V3) as `0x${string}`;
+
+        if (isNativeOut) {
+          const swapData   = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle", args: [{ tokenIn, tokenOut: WETH, fee: params.quote.fee, recipient: router, amountIn: params.amountIn, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }] });
+          const unwrapData = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "unwrapWETH9",      args: [amountOutMin, params.recipient as `0x${string}`] });
+          hash = await writeContractAsync({ address: router, abi: UNIV3_ROUTER_ABI, functionName: "multicall", args: [[swapData, unwrapData]], value: 0n });
+        } else {
+          hash = await writeContractAsync({
+            address: router, abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle",
+            args: [{ tokenIn, tokenOut, fee: params.quote.fee, recipient: params.recipient as `0x${string}`, amountIn: params.amountIn, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }],
+            value: isNativeIn ? params.amountIn : 0n,
+          });
+        }
+
+      // ── Aerodrome ─────────────────────────────────────────────
+      } else if (params.quote.dex === "AERODROME") {
+        const router   = DEX_ROUTERS.AERODROME as `0x${string}`;
+        const isStable = params.quote.fee <= 5;
+        const route    = [{ from: tokenIn, to: tokenOut, stable: isStable, factory: AERODROME_FACTORY }];
+
+        if (isNativeIn) {
+          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, route, params.recipient as `0x${string}`, deadline], value: params.amountIn });
+        } else if (isNativeOut) {
+          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
+        } else {
+          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
+        }
+
+      // ── SushiSwap ─────────────────────────────────────────────
+      } else if (params.quote.dex === "SUSHISWAP") {
+        const router = DEX_ROUTERS.SUSHISWAP as `0x${string}`;
+        const path   = [tokenIn, WETH, tokenOut].filter((v, i, a) => i === 0 || v !== a[i - 1]) as `0x${string}`[];
+
+        if (isNativeIn) {
+          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, path, params.recipient as `0x${string}`, deadline], value: params.amountIn });
+        } else if (isNativeOut) {
+          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
+        } else {
+          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
+        }
+
+      } else {
+        throw new Error(`Unsupported DEX: ${params.quote.dex}`);
+      }
+
+      setTxHash(hash);
+      setStatus("success");
+      toast.success("Swap successful!", {
+        id:     "swap",
+        action: { label: "View on Basescan", onClick: () => window.open(basescanTx(hash)) },
+      });
+
+      insertSwapRecord({
+        user_address: userAddress.toLowerCase(),
+        token_in:     params.tokenIn,
+        token_out:    params.tokenOut,
+        amount_in:    params.amountIn.toString(),
+        amount_out:   params.quote.amountOut.toString(),
+        dex:          params.quote.dexName,
+        tx_hash:      hash,
+        volume_usd:   0,
+      }).then(async () => {
+        // Calculate real volume_usd and update
+        try {
+          const price     = await fetchTokenPrice(params.tokenIn);
+          const amountNum = Number(params.amountIn) / 10 ** params.decimalsIn;
+          const volumeUsd = price * amountNum;
+          if (volumeUsd > 0) {
+            // update the record with real volume
+            const { supabase } = await import("@/lib/supabase");
+            await supabase
+              .from("swap_records")
+              .update({ volume_usd: volumeUsd })
+              .eq("tx_hash", hash);
+            // also update user score volume
+            const { supabase: sb } = await import("@/lib/supabase");
+            const { data: existing } = await sb.from("user_scores").select("volume_usd").eq("address", userAddress.toLowerCase()).single();
+            if (existing) {
+              await sb.from("user_scores").update({ volume_usd: (existing.volume_usd ?? 0) + volumeUsd }).eq("address", userAddress.toLowerCase());
+            }
+          }
+        } catch { /* non-blocking */ }
+        // Referral reward
+        try {
+          const { getReferrer: getRef, addReferralReward: addReward } = await import("@/lib/supabase");
+          const referrer = await getRef(userAddress);
+          if (referrer) {
+            await addReward(referrer, userAddress, hash, 25);
+          }
+        } catch { /* non-blocking */ }
+      }).catch(console.error);
+
+    } catch (err: unknown) {
+      setStatus("error");
+      const msg = (err instanceof Error ? err.message : "").toLowerCase();
+      toast.error(
+        msg.includes("user rejected")  ? "Transaction rejected"
+        : msg.includes("insufficient") ? "Insufficient balance"
+        : msg.includes("no weth")      ? "No WETH balance to unwrap"
+        : msg.includes("slippage") || msg.includes("too little") ? "Price moved — try higher slippage"
+        : "Swap failed",
+        { id: "swap" },
+      );
+      console.error("[swap error]", err);
+      throw err;
+    }
+  }
+
+  function reset() { setStatus("idle"); setTxHash(undefined); }
+
+  return { execute, status, txHash, reset };
+}

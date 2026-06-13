@@ -1,0 +1,24 @@
+# Environment variables — NEVER commit
+.env
+.env.local
+.env*.local
+backend/.env
+contracts/.env
+frontend/.env.local
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Misc
+.DS_Store
+*.pem
+*.tsbuildinfo

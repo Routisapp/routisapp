@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary:    #F5EFE6;
+  --bg-card:       #FAF6F0;
+  --bg-input:      #EDE6DC;
+  --border:        #E8DDD0;
+  --text-primary:  #2C2018;
+  --text-secondary:#8C7B6E;
+  --accent-blue:   #C9693A;   /* terra cotta — primary action */
+  --accent-green:  #C9693A;   /* terra cotta — matches primary action */
+  --accent-orange: #B8860B;   /* dark gold — warning */
+  --accent-red:    #C9522A;   /* warm orange-red — error */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+/* Hide browser number input spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-card); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
