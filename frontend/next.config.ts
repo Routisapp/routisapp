@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  eslint: {
-    // ESLint errors won't fail the production build
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     // Type errors won't fail the production build
     ignoreBuildErrors: true,
@@ -17,6 +13,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "tokens.pancakeswap.finance" },
     ],
   },
+  // Turbopack config (Next.js 16+) — empty = default behavior, silences the warning
+  turbopack: {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   webpack: (config: any) => {
     config.cache = false;
