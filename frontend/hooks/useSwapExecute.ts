@@ -1,13 +1,20 @@
 "use client";
 
+// CANONICAL SOURCE — there is only one copy of this hook.
+// useMultiSwap.ts imports from "./useSwapExecute"
+// SwapLayout.tsx imports from "@/hooks/useSwapExecute"
+// Both resolve to this file. Do NOT create additional copies.
+
 import { useState } from "react";
 import { useWriteContract, usePublicClient, useSendTransaction } from "wagmi";
-import { encodeFunctionData, erc20Abi, maxUint256 } from "viem";
+import { useQueryClient } from "@tanstack/react-query";
+import { encodeFunctionData, erc20Abi, maxUint256, formatUnits } from "viem";
 import { toast } from "sonner";
-import { insertSwapRecord, getReferrer, addReferralReward } from "@/lib/supabase";
+import { insertSwapRecord } from "@/lib/supabase";
 import { basescanTx, fetchTokenPrice } from "@/lib/utils";
 import type { SwapExecuteParams, SwapStatus } from "@/types/swap";
 import { DEX_ROUTERS } from "@/constants/dex-addresses";
+import { AERODROME_FACTORY } from "@/constants/dex-registry";
 
 const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const WETH       = "0x4200000000000000000000000000000000000006" as const;
@@ -111,8 +118,6 @@ const SUSHI_ROUTER_ABI = [
   },
 ] as const;
 
-const AERODROME_FACTORY = "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as const;
-
 function isWethEthPair(tokenIn: string, tokenOut: string): "wrap" | "unwrap" | null {
   const a = tokenIn.toLowerCase();
   const b = tokenOut.toLowerCase();
@@ -121,17 +126,26 @@ function isWethEthPair(tokenIn: string, tokenOut: string): "wrap" | "unwrap" | n
   return null;
 }
 
-export function useSwapExecute() {
+export function useSwapExecute(onSuccess?: () => void) {
   const [status,  setStatus]  = useState<SwapStatus>("idle");
   const [txHash,  setTxHash]  = useState<`0x${string}` | undefined>();
   const { writeContractAsync }   = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
+  const queryClient = useQueryClient();
   // usePublicClient uses the wallet's connected provider — no CORS issues
   const walletClient = usePublicClient();
 
-  async function execute(params: SwapExecuteParams, userAddress: string) {
+  async function execute(params: SwapExecuteParams, userAddress: string, swapType: "swap" | "multi_swap" | "ai_agent" = "swap") {
     setStatus("swapping");
     toast.loading("Sending transaction...", { id: "swap" });
+
+    // Fix 3: Fail early if walletClient is not ready — prevents silent approve skip
+    // which would cause the swap to revert on-chain (wasting gas) with insufficient allowance.
+    if (!walletClient) {
+      setStatus("error");
+      toast.error("Wallet not connected — please try again", { id: "swap" });
+      throw new Error("Wallet client not ready");
+    }
 
     const slippageBps  = BigInt(Math.round(params.slippage * 100));
     const amountOutMin = params.quote.amountOut - (params.quote.amountOut * slippageBps) / 10000n;
@@ -147,7 +161,8 @@ export function useSwapExecute() {
       let hash: `0x${string}`;
 
       // ── ERC-20 Approve (skip for native ETH and wrap/unwrap) ─
-      if (!isNativeIn && wethOp === null && walletClient) {
+      // walletClient is guaranteed non-null here (checked above)
+      if (!isNativeIn && wethOp === null) {
         const spender = (
           params.quote.dex === "UNISWAP_V3"     ? DEX_ROUTERS.UNISWAP_V3     :
           params.quote.dex === "PANCAKESWAP_V3" ? DEX_ROUTERS.PANCAKESWAP_V3 :
@@ -246,7 +261,22 @@ export function useSwapExecute() {
       }
 
       setTxHash(hash);
+
+      // Wait for tx to be confirmed before refreshing balances & stats
+      try {
+        await walletClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+      } catch { /* non-blocking — proceed even if receipt polling fails */ }
+
       setStatus("success");
+      onSuccess?.();
+
+      // Invalidate all cached queries so balances and Routis stats refresh immediately
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["swap-history"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-score-leaderboard"] });
+
       toast.success("Swap successful!", {
         id:     "swap",
         action: { label: "View on Basescan", onClick: () => window.open(basescanTx(hash)) },
@@ -261,24 +291,40 @@ export function useSwapExecute() {
         dex:          params.quote.dexName,
         tx_hash:      hash,
         volume_usd:   0,
+        swap_type:    swapType,
       }).then(async () => {
         // Calculate real volume_usd and update
         try {
-          const price     = await fetchTokenPrice(params.tokenIn);
-          const amountNum = Number(params.amountIn) / 10 ** params.decimalsIn;
+          const price = await fetchTokenPrice(params.tokenIn);
+          // Fix 5: Use formatUnits (viem) instead of Number(bigint) to avoid precision loss
+          // for large amounts with 18 decimals (Number() loses precision beyond MAX_SAFE_INTEGER).
+          const amountNum = parseFloat(formatUnits(params.amountIn, params.decimalsIn));
           const volumeUsd = price * amountNum;
           if (volumeUsd > 0) {
-            // update the record with real volume
+            // Single import — Fix 6: removed duplicate import("@/lib/supabase") calls
             const { supabase } = await import("@/lib/supabase");
+
+            // update the record with real volume
             await supabase
               .from("swap_records")
               .update({ volume_usd: volumeUsd })
               .eq("tx_hash", hash);
-            // also update user score volume
-            const { supabase: sb } = await import("@/lib/supabase");
-            const { data: existing } = await sb.from("user_scores").select("volume_usd").eq("address", userAddress.toLowerCase()).single();
+
+            // TODO (Fix 6 — race condition risk): The read-then-write pattern below is NOT atomic.
+            // If two swaps complete concurrently for the same user, one volume update may overwrite
+            // the other (lost update). To fix properly, replace with a Postgres RPC:
+            //   await supabase.rpc("increment_volume", { user_addr: userAddress.toLowerCase(), amount: volumeUsd })
+            // where increment_volume does: UPDATE user_scores SET volume_usd = volume_usd + amount WHERE address = user_addr
+            const { data: existing } = await supabase
+              .from("user_scores")
+              .select("volume_usd")
+              .eq("address", userAddress.toLowerCase())
+              .single();
             if (existing) {
-              await sb.from("user_scores").update({ volume_usd: (existing.volume_usd ?? 0) + volumeUsd }).eq("address", userAddress.toLowerCase());
+              await supabase
+                .from("user_scores")
+                .update({ volume_usd: (existing.volume_usd ?? 0) + volumeUsd })
+                .eq("address", userAddress.toLowerCase());
             }
           }
         } catch { /* non-blocking */ }

@@ -60,7 +60,7 @@ interface RewardRow {
 export function ReferralView({ address }: Props) {
   const [copied, setCopied] = useState(false);
 
-  const refLink = `https://agex.app/ref/${address.slice(0, 8)}`;
+  const refLink = `https://routis.app/ref/${address.slice(0, 8)}`;
 
   function copyLink() {
     navigator.clipboard.writeText(refLink).catch(() => {});

@@ -1,3 +1,5 @@
+// DexKey is the canonical identifier for each supported DEX.
+// Add new values here when adding a new DEX to constants/dex-registry.ts.
 export type DexKey = "UNISWAP_V3" | "AERODROME" | "SUSHISWAP" | "PANCAKESWAP_V3";
 
 export interface SwapQuote {

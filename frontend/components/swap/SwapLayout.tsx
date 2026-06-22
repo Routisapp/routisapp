@@ -14,11 +14,13 @@ import { useTokenApproval } from "@/hooks/useTokenApproval";
 import { useSwapExecute }   from "@/hooks/useSwapExecute";
 import { useWethWrap }      from "@/hooks/useWethWrap";
 import { useTokenBalance }  from "@/hooks/useTokenBalance";
+import { formatInputAmount } from "@/lib/utils";
 import { BASE_TOKENS, NATIVE_ETH, WETH_ADDRESS, type Token } from "@/constants/tokens";
-import type { SwapQuote } from "@/types/swap";
+import { DEX_ROUTER_ADDRESS } from "@/constants/dex-registry";
+import { useRouteStats }     from "@/hooks/useRouteStats";
 
-const ETH_TOKEN  = BASE_TOKENS[0];
-const USDC_TOKEN = BASE_TOKENS[2];
+const ETH_TOKEN  = BASE_TOKENS.find(t => t.symbol === "ETH")!;
+const USDC_TOKEN = BASE_TOKENS.find(t => t.symbol === "USDC")!;
 
 const PCT_BUTTONS = [
   { label: "25%", pct: 0.25 },
@@ -37,8 +39,8 @@ export function SwapLayout() {
   const [slippage,    setSlippage]    = useState(0.5);
   const [selectedDex, setSelectedDex] = useState<string | null>(null);
 
-  const { balance, refetch: refetchBalance } = useTokenBalance(address, tokenIn.address);
-  const { balance: balanceOut }              = useTokenBalance(address, tokenOut.address);
+  const { balance, refetch: refetchBalance }                = useTokenBalance(address, tokenIn.address);
+  const { balance: balanceOut, refetch: refetchBalanceOut } = useTokenBalance(address, tokenOut.address);
 
   const isWrap        = tokenIn.address === NATIVE_ETH   && tokenOut.address === WETH_ADDRESS;
   const isUnwrap      = tokenIn.address === WETH_ADDRESS && tokenOut.address === NATIVE_ETH;
@@ -47,10 +49,10 @@ export function SwapLayout() {
   const { data: quotes = [], isLoading: quotesLoading, error: quotesError, refetch: refetchQuotes } = useSwapQuotes({
     tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn,
     decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals,
-    enabled: !!amountIn && parseFloat(amountIn) > 0 && !isWethEthPair,
+    enabled: !!amountIn && parseFloat(amountIn.replace(",", ".")) > 0 && !isWethEthPair,
   });
 
-  const wethEthQuote = isWethEthPair && amountIn && parseFloat(amountIn) > 0 ? {
+  const wethEthQuote = isWethEthPair && amountIn && parseFloat(amountIn.replace(",", ".")) > 0 ? {
     dex: (isWrap ? "WRAP" : "UNWRAP") as never,
     dexName: isWrap ? "Wrap ETH → WETH" : "Unwrap WETH → ETH",
     amountOut: parseUnits(amountIn, tokenOut.decimals),
@@ -63,38 +65,58 @@ export function SwapLayout() {
     ? wethEthQuote
     : (quotes.find((q) => q.dex === selectedDex) ?? quotes[0] ?? null);
 
+  // exactBalanceStr: full-precision string used ONLY for the amountInWei equality shortcut
+  // inputBalanceStr: trimmed string suitable for the input field (MAX button)
   const exactBalanceStr = formatUnits(balance, tokenIn.decimals);
+  const inputBalanceStr = formatInputAmount(balance, tokenIn.decimals);
+
   const amountInWei = amountIn ? (() => {
     try {
       const n = amountIn.replace(",", ".");
-      if (n === exactBalanceStr) return balance;
+      // Match both full-precision and trimmed representations of the full balance
+      if (n === exactBalanceStr || n === inputBalanceStr) return balance;
       return parseUnits(n, tokenIn.decimals);
     } catch { return 0n; }
   })() : 0n;
 
-  const spenderAddress = isWethEthPair ? "0x0000000000000000000000000000000000000000" :
-    activeQuote?.dex === "UNISWAP_V3"     ? "0x2626664c2603336E57B271c5C0b26F421741e481" :
-    activeQuote?.dex === "PANCAKESWAP_V3" ? "0x678Aa4bF4E210cf2166753e054d5b7c31cc7fa86" :
-    activeQuote?.dex === "AERODROME"      ? "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43" :
-    activeQuote?.dex === "SUSHISWAP"      ? "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891" :
-    "0x0000000000000000000000000000000000000000";
+  const spenderAddress = isWethEthPair
+    ? "0x0000000000000000000000000000000000000000"
+    : (DEX_ROUTER_ADDRESS[activeQuote?.dex as keyof typeof DEX_ROUTER_ADDRESS]
+        ?? "0x0000000000000000000000000000000000000000");
 
   const { needsApproval, approve, isApproving } = useTokenApproval(
     isWethEthPair ? "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" : tokenIn.address,
     spenderAddress, amountInWei, address,
   );
 
-  const { execute, status: swapStatus } = useSwapExecute();
+  const { execute, status: swapStatus } = useSwapExecute(() => {
+    refetchBalance();
+    refetchBalanceOut();
+    // Kriter 7: swap tamamlanınca diyagramı anında güncelle (60s polling'i bekleme)
+    refreshRouteStats();
+  });
+
+  // Route stats refresh — called after each successful swap
+  const { refresh: refreshRouteStats } = useRouteStats({ pollInterval: 0, skipInitialFetch: true });
+  // pollInterval:0 + skipInitialFetch:true → hiç fetch yapmaz, sadece refresh() tetikler.
+  // RouteStatsCard'ın kendi useRouteStats instance'ı 60s polling'i yönetir.
   const { wrap, unwrap, status: wethStatus } = useWethWrap();
 
   const isWrongChain   = !!address && chainId !== base.id;
-  const isInsufficient = balance > 0n && amountInWei > balance;
+  // isInsufficient: true whenever a positive amount exceeds the on-chain balance.
+  // Intentionally no "balance > 0n" guard — zero balance + any amount must be insufficient.
+  const isInsufficient = address ? (amountInWei > 0n && amountInWei > balance) : false;
   const isPending      = swapStatus === "swapping" || wethStatus === "pending";
 
   function setPct(pct: number) {
     if (balance === 0n) return;
-    const raw = (balance * BigInt(Math.round(pct * 10000))) / 10000n;
-    setAmountIn(parseFloat(formatUnits(raw, tokenIn.decimals)).toFixed(6).replace(/\.?0+$/, ""));
+    if (pct === 1.0) {
+      // MAX: use trimmed input-safe string (no 18-decimal raw value)
+      setAmountIn(inputBalanceStr);
+    } else {
+      const raw = (balance * BigInt(Math.round(pct * 10000))) / 10000n;
+      setAmountIn(formatInputAmount(raw, tokenIn.decimals));
+    }
     setSelectedDex(null);
   }
 
@@ -104,13 +126,18 @@ export function SwapLayout() {
 
   async function handleSwap() {
     if (!address || !amountInWei || amountInWei === 0n) return;
-    if (isWrap)   { await wrap(amountInWei);   setAmountIn(""); setTimeout(() => refetchBalance(), 2000); return; }
-    if (isUnwrap) { await unwrap(amountInWei); setAmountIn(""); setTimeout(() => refetchBalance(), 2000); return; }
+    if (isWrap)   { await wrap(amountInWei);   setAmountIn(""); refetchBalance(); refetchBalanceOut(); return; }
+    if (isUnwrap) { await unwrap(amountInWei); setAmountIn(""); refetchBalance(); refetchBalanceOut(); return; }
     if (!activeQuote) return;
     if (needsApproval) { await approve(); return; }
     if (!isWethEthPair) await refetchQuotes();
-    await execute({ quote: activeQuote, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountInWei, slippage, recipient: address, decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals }, address);
-    setTimeout(() => refetchBalance(), 2000);
+    await execute(
+      { quote: activeQuote, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountInWei, slippage, recipient: address, decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals },
+      address,
+    );
+    // Clear input after successful swap (execute throws on failure, so this only runs on success)
+    setAmountIn("");
+    setSelectedDex(null);
   }
 
   const btnLabel =
@@ -129,12 +156,12 @@ export function SwapLayout() {
   const hasRoutes = quotes.length > 0 || quotesLoading;
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-2">
+    <div className="flex w-full flex-col gap-2">
 
       {/* ── Swap card ── */}
       <div className="rounded-2xl border border-[--border] bg-[--bg-card] p-3 shadow-2xl">
 
-        {/* Header — Swap başlığı kaldırıldı, sadece slippage */}
+        {/* Header — sadece slippage */}
         <div className="mb-3 flex justify-end">
           <SlippageSettings value={slippage} onChange={setSlippage} />
         </div>
@@ -145,7 +172,7 @@ export function SwapLayout() {
             <span className="text-[11px] text-[--text-secondary]">You pay</span>
             {address && (
               <span className="text-[11px] text-[--text-secondary]">
-                Balance: <span className="text-[--text-primary] font-semibold">{parseFloat(formatUnits(balance, tokenIn.decimals)).toFixed(4)}</span>
+                Balance: <span className="text-[--text-primary] font-semibold">{formatInputAmount(balance, tokenIn.decimals)}</span>
               </span>
             )}
           </div>
@@ -170,10 +197,10 @@ export function SwapLayout() {
               ))}
             </div>
           )}
-          {isInsufficient && <p className="mt-1 text-[11px] text-[--accent-red]">Insufficient {tokenIn.symbol} balance</p>}
+
         </div>
 
-        {/* Arrow — bigger tap target */}
+        {/* Arrow */}
         <div className="flex justify-center my-1.5">
           <button onClick={swapTokens} className="flex h-10 w-10 items-center justify-center rounded-full bg-[--bg-input] border border-[--border] text-[--text-secondary] hover:text-[--accent-blue] hover:border-[--accent-blue] transition-all">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -188,7 +215,7 @@ export function SwapLayout() {
             <span className="text-[11px] text-[--text-secondary]">You receive</span>
             {address && (
               <span className="text-[11px] text-[--text-secondary]">
-                Balance: <span className="text-[--text-primary] font-semibold">{parseFloat(formatUnits(balanceOut, tokenOut.decimals)).toFixed(4)}</span>
+                Balance: <span className="text-[--text-primary] font-semibold">{formatInputAmount(balanceOut, tokenOut.decimals)}</span>
               </span>
             )}
           </div>
@@ -204,7 +231,7 @@ export function SwapLayout() {
 
         {/* Exchange rate info */}
         {activeQuote && amountInWei > 0n && !isWethEthPair && (
-          <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-[#f0ebe4] border border-[--border] px-2.5 py-1.5">
+          <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-[--bg-input] border border-[--border] px-2.5 py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/>
             </svg>
@@ -242,8 +269,8 @@ export function SwapLayout() {
           <button onClick={handleSwap}
             disabled={isInsufficient || isPending || swapStatus === "approving" || isApproving || (!isWethEthPair && !activeQuote) || !amountInWei || amountInWei === 0n}
             className="w-full rounded-xl py-3 text-sm font-bold transition-all disabled:cursor-not-allowed enabled:hover:brightness-110"
-            style={{ background: (!isInsufficient && (isWethEthPair || activeQuote) && amountInWei > 0n) ? "linear-gradient(90deg,#C9693A,#B55A2E)" : "#E8DDD0",
-                     color:      (!isInsufficient && (isWethEthPair || activeQuote) && amountInWei > 0n) ? "#ffffff" : "#6B5A4E" }}>
+            style={{ background: (!isInsufficient && (isWethEthPair || activeQuote) && amountInWei > 0n) ? "linear-gradient(90deg,#C9693A,#B55A2E)" : "var(--bg-input)",
+                     color:      (!isInsufficient && (isWethEthPair || activeQuote) && amountInWei > 0n) ? "#ffffff" : "var(--text-secondary)" }}>
             {(isPending || swapStatus === "approving" || isApproving)
               ? <span className="flex items-center justify-center gap-2"><LoadingSpinner size={16} color="white" /> {btnLabel}</span>
               : btnLabel}

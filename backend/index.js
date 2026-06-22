@@ -3,9 +3,6 @@ const cors    = require('cors');
 const { ethers } = require('ethers');
 require('dotenv').config();
 
-// Windows SSL sertifika sorununu çöz
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const config           = require('./config');
 const { getUniswapQuote }   = require('./uniswap');
 const { getAerodromeQuote } = require('./aerodrome');

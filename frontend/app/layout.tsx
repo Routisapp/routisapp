@@ -1,20 +1,27 @@
 import type { Metadata } from "next";
 import { Providers } from "./providers";
+import { ThemeProvider } from "@/lib/theme";
+import { SocialDock } from "@/components/layout/SocialDock";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title:       "Agex — DEX Aggregator",
+  title:       "Routis — DEX Aggregator",
   description: "Best swap rates on Base network",
   icons: {
-    icon: "/logo.png",
+    icon:    "/logo1.png",
+    apple:   "/logo1.png",
+    shortcut:"/logo1.png",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <Providers>{children}</Providers>
+        <ThemeProvider>
+          <Providers>{children}</Providers>
+          <SocialDock />
+        </ThemeProvider>
       </body>
     </html>
   );

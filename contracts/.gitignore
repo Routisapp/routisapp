@@ -1,0 +1,9 @@
+# Foundry çıktıları
+out/
+cache/
+
+# Gizli bilgiler — ASLA commit'leme
+.env
+
+# Broadcast logları (deploy geçmişi — isteğe bağlı)
+broadcast/*/31337/

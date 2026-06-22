@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { createPublicClient, http, erc20Abi, getAddress } from "viem";
+import { base } from "viem/chains";
 
 import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -13,28 +15,102 @@ import { PortfolioView } from "@/components/profile/PortfolioView";
 import { ReferralView } from "@/components/profile/ReferralView";
 
 import { useNFTTier } from "@/hooks/useNFTTier";
-import { fetchSwapHistory, fetchUserScore, registerReferral } from "@/lib/supabase";
-import { shortAddress, formatUsd, basescanTx, getTierFromScore } from "@/lib/utils";
-import { BASE_TOKENS } from "@/constants/tokens";
+import { fetchSwapHistory, registerReferral } from "@/lib/supabase";
+import { basescanTx, getTierFromScore } from "@/lib/utils";
+import { BASE_TOKENS, NATIVE_ETH } from "@/constants/tokens";
+import { resolveTokenLogo } from "@/lib/tokenLogo";
 import type { SwapRecord } from "@/types/leaderboard";
 
-// ─── Token lookup map ─────────────────────────────────────────
+// ─── Token lookup map (known tokens) ─────────────────────────
 const TOKEN_MAP: Record<string, { symbol: string; logoURI: string }> = {};
-for (const t of BASE_TOKENS) { TOKEN_MAP[t.address.toLowerCase()] = t; TOKEN_MAP[t.address] = t; }
+for (const t of BASE_TOKENS) {
+  TOKEN_MAP[t.address.toLowerCase()] = t;
+  TOKEN_MAP[t.address] = t;
+}
+// Native ETH alias
+TOKEN_MAP[NATIVE_ETH.toLowerCase()] = TOKEN_MAP[NATIVE_ETH] = {
+  symbol: "ETH",
+  logoURI: "https://assets.coingecko.com/coins/images/279/thumb/ethereum.png?1595348880",
+};
 
-// ─── Token icon — monochrome ──────────────────────────────────
+// ─── Public client for on-chain symbol() lookups ─────────────
+const publicClient = createPublicClient({ chain: base, transport: http() });
+
+// ─── Per-session cache for resolved unknown tokens ────────────
+const resolvedCache = new Map<string, { symbol: string; logoURI: string }>();
+
+// ─── Hook: resolve unknown token address → {symbol, logoURI} ─
+function useTokenInfo(address: string): { symbol: string; logoURI: string } {
+  const known = TOKEN_MAP[address] ?? TOKEN_MAP[address.toLowerCase()];
+  const [info, setInfo] = useState<{ symbol: string; logoURI: string }>(
+    known ?? resolvedCache.get(address.toLowerCase()) ?? { symbol: "?", logoURI: "" }
+  );
+
+  useEffect(() => {
+    if (known) return; // already in static map
+    const lower = address.toLowerCase();
+    if (resolvedCache.has(lower)) {
+      setInfo(resolvedCache.get(lower)!);
+      return;
+    }
+
+    let cancelled = false;
+    async function resolve() {
+      try {
+        const checksummed = getAddress(address);
+
+        // Fetch symbol on-chain + logo in parallel
+        const [symbol, logoURI] = await Promise.all([
+          publicClient.readContract({
+            address: checksummed,
+            abi: erc20Abi,
+            functionName: "symbol",
+          }) as Promise<string>,
+          resolveTokenLogo(checksummed),
+        ]);
+
+        if (cancelled) return;
+        const result = { symbol, logoURI };
+        resolvedCache.set(lower, result);
+        setInfo(result);
+      } catch {
+        // On-chain call failed — show "?" as fallback, no address
+        if (!cancelled) {
+          const fallback = { symbol: "?", logoURI: "" };
+          resolvedCache.set(address.toLowerCase(), fallback);
+          setInfo(fallback);
+        }
+      }
+    }
+
+    resolve();
+    return () => { cancelled = true; };
+  }, [address, known]);
+
+  return info;
+}
+
+// ─── Token icon ───────────────────────────────────────────────
 function TokenIcon({ logoURI, symbol }: { logoURI: string; symbol: string }) {
   return (
-    <span
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold shrink-0"
-      style={{ background: "#E8DDD0", color: "#5A4A3A" }}
-    >
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold shrink-0 bg-[--bg-input] text-[--text-secondary]">
       {logoURI ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logoURI} alt={symbol} className="h-5 w-5 rounded-full"
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
       ) : symbol[0]}
     </span>
+  );
+}
+
+// ─── Token display: resolves unknown addresses dynamically ────
+function TokenDisplay({ address }: { address: string }) {
+  const { symbol, logoURI } = useTokenInfo(address);
+  return (
+    <>
+      <TokenIcon logoURI={logoURI} symbol={symbol} />
+      <span className="text-sm font-semibold text-[--text-primary] truncate" style={{ maxWidth: 56 }}>{symbol}</span>
+    </>
   );
 }
 
@@ -57,16 +133,36 @@ type ProfileTab = "portfolio" | "history" | "referral";
 export default function ProfilePage() {
   const { address } = useAccount();
   const [tab, setTab] = useState<ProfileTab>("portfolio");
-  const [swapPage, setSwapPage] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const PAGE_SIZE = 5;
 
-  const { score, mintedTiers, userScore } = useNFTTier(address);
+  const { score, mintedTiers } = useNFTTier(address);
   const tier = getTierFromScore(score);
 
   const { data: swaps = [], isLoading: swapsLoading } = useQuery({
-    queryKey: ["swap-history", address, swapPage],
-    queryFn: () => fetchSwapHistory(address!, swapPage),
+    queryKey: ["swap-history", address],
+    queryFn: () => fetchSwapHistory(address!, 0, 500),
     enabled: !!address,
   });
+
+  // Client-side pagination
+  const totalPages  = Math.max(1, Math.ceil(swaps.length / PAGE_SIZE));
+  const safePage    = Math.min(historyPage, totalPages);
+  const pageSwaps   = (swaps as SwapRecord[]).slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  function goHistoryPage(p: number) {
+    setHistoryPage(Math.max(1, Math.min(p, totalPages)));
+  }
+
+  function historyPageNumbers(): (number | "…")[] {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages: (number | "…")[] = [1];
+    if (safePage > 3) pages.push("…");
+    for (let p = Math.max(2, safePage - 1); p <= Math.min(totalPages - 1, safePage + 1); p++) pages.push(p);
+    if (safePage < totalPages - 2) pages.push("…");
+    pages.push(totalPages);
+    return pages;
+  }
 
   // Handle /ref/0x... URL param on mount (client-side)
   if (typeof window !== "undefined") {
@@ -106,59 +202,66 @@ export default function ProfilePage() {
     { key: "referral", label: "Referral" },
   ];
 
+  // ── Tier badge config ───────────────────────────────────────────────────
+  const TIER_BADGE: Record<string, { color: string; emoji: string; label: string }> = {
+    Unranked: { color: "#8b8fa8", emoji: "—",  label: "Unranked" },
+    Bronze:   { color: "#C9693A", emoji: "🥉", label: "Bronze"   },
+    Silver:   { color: "#8C7B6E", emoji: "🥈", label: "Silver"   },
+    Gold:     { color: "#B8860B", emoji: "🥇", label: "Gold"     },
+    Diamond:  { color: "#7B5EA7", emoji: "💎", label: "Diamond"  },
+  };
+  const badge = TIER_BADGE[tier.name] ?? TIER_BADGE.Unranked;
+
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-2xl px-4 py-8 pb-24 md:pb-10">
+      <main className="py-8 pb-24 md:pb-10">
+        {/* ── Shared centered container ────────────────────── */}
+        <div className="mx-auto w-full px-4" style={{ maxWidth: 680 }}>
 
         {/* ── Profile card ──────────────────────────────────── */}
-        <div className="mb-5 rounded-xl border border-[--border] bg-[--bg-card] p-4">
-          <div className="flex items-start gap-4">
-            {/* Avatar */}
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-black text-white"
-              style={{ background: "linear-gradient(135deg, #C9693A, #B55A2E)" }}
+        <div
+          className="mb-5 flex flex-col items-center"
+          style={{
+            background:   "var(--bg-card)",
+            border:       "1px solid var(--border)",
+            borderRadius: 16,
+            padding:      "28px 32px",
+          }}
+        >
+          {/* Avatar */}
+          <div
+            style={{
+              width:        64,
+              height:       64,
+              borderRadius: "50%",
+              background:   "var(--bg-input)",
+              border:       "2px solid var(--border)",
+              overflow:     "hidden",
+              marginBottom: 14,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/profile.jpg" alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+
+          {/* Address + Tier badge inline */}
+          <div className="flex items-center justify-center gap-2 flex-wrap mb-0">
+            <span
+              className="font-mono text-center break-all"
+              style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}
             >
-              {address[2].toUpperCase()}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                <span className="font-mono text-sm font-bold text-[--text-primary]">
-                  {shortAddress(address)}
-                </span>
-                <span
-                  className="rounded-md px-2 py-0.5 text-xs font-bold"
-                  style={{
-                    background: `${tier.color}22`,
-                    color: tier.color,
-                  }}
-                >
-                  {tier.name}
-                </span>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: "Score", value: score },
-                  { label: "Swaps", value: userScore?.swap_count ?? 0 },
-                  { label: "Vol", value: formatUsd(userScore?.volume_usd ?? 0) },
-                  { label: "Streak", value: `${userScore?.consecutive_days ?? 0}d` },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-lg border border-[--border] bg-[--bg-input] px-2 py-2 text-center"
-                  >
-                    <div className="text-sm font-black text-[--text-primary]">
-                      {stat.value}
-                    </div>
-                    <div className="text-[10px] text-[--text-secondary]">
-                      {stat.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {address}
+            </span>
+            <div
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold shrink-0"
+              style={{
+                background: `${badge.color}22`,
+                color:      badge.color,
+                border:     `1px solid ${badge.color}44`,
+              }}
+            >
+              {badge.emoji} {badge.label}
             </div>
           </div>
         </div>
@@ -190,7 +293,7 @@ export default function ProfilePage() {
         )}
 
         {/* ── Tab switcher ──────────────────────────────────── */}
-        <div className="mb-4 flex gap-1.5 p-1 rounded-xl border border-[--border] bg-[--bg-card] w-fit">
+        <div className="mb-4 flex gap-1.5 p-1 rounded-xl border border-[--border] bg-[--bg-card] w-full">
           {TABS.map(({ key, label }) => (
             <button
               key={key}
@@ -213,9 +316,10 @@ export default function ProfilePage() {
         {tab === "history" && (
           <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_60px_100px_28px] gap-2 px-4 py-2.5 border-b border-[--border] text-[11px] font-bold uppercase tracking-wide text-[--text-secondary]">
+            <div className="grid grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-2.5 border-b border-[--border] text-[11px] font-bold uppercase tracking-wide text-[--text-secondary]">
               <div>Transaction</div>
               <div className="text-right">Pts</div>
+              <div className="text-right">Time</div>
               <div className="text-right">Status</div>
               <div />
             </div>
@@ -231,30 +335,35 @@ export default function ProfilePage() {
                 No swaps yet
               </p>
             ) : (
-              (swaps as SwapRecord[]).map((s) => {
-                const tokenInInfo  = TOKEN_MAP[s.token_in]  ?? { symbol: s.token_in.slice(0, 6),  logoURI: "" };
-                const tokenOutInfo = TOKEN_MAP[s.token_out] ?? { symbol: s.token_out.slice(0, 6), logoURI: "" };
+              pageSwaps.map((s) => {
                 return (
                   <div
                     key={s.id}
-                    className="grid grid-cols-[1fr_60px_100px_28px] gap-2 px-4 py-3 border-b border-[--border] last:border-0 items-center"
+                    className="grid grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-3 border-b border-[--border] last:border-0 items-center"
                   >
-                    {/* Transaction: logo + symbol → logo + symbol + time */}
+                    {/* Transaction: token pair in a single borderless pill */}
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <TokenIcon logoURI={tokenInInfo.logoURI} symbol={tokenInInfo.symbol} />
-                        <span className="text-sm font-semibold text-[--text-primary]">{tokenInInfo.symbol}</span>
-                        <span className="text-[--text-secondary] text-xs">→</span>
-                        <TokenIcon logoURI={tokenOutInfo.logoURI} symbol={tokenOutInfo.symbol} />
-                        <span className="text-sm font-semibold text-[--text-primary]">{tokenOutInfo.symbol}</span>
-                      </div>
-                      <div className="text-[10px] text-[--text-secondary] mt-0.5">
-                        {timeAgo(s.created_at)}
+                      <div
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border border-[--border] overflow-hidden"
+                        style={{ width: 180, minWidth: 180, maxWidth: 180 }}
+                      >
+                        <TokenDisplay address={s.token_in} />
+                        <span className="text-[--text-secondary] text-xs shrink-0">→</span>
+                        <TokenDisplay address={s.token_out} />
                       </div>
                     </div>
                     {/* Points */}
                     <div className="text-right text-xs font-bold" style={{ color: "#C9693A" }}>
                       +{s.score_earned}
+                    </div>
+                    {/* Time */}
+                    <div className="text-right">
+                      <div className="text-xs font-semibold text-[--text-primary]">
+                        {timeAgo(s.created_at)}
+                      </div>
+                      <div className="text-[10px] text-[--text-secondary] mt-0.5">
+                        {new Date(s.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
+                      </div>
                     </div>
                     {/* Status */}
                     <div className="flex justify-end">
@@ -280,17 +389,49 @@ export default function ProfilePage() {
             )}
 
             {/* Pagination */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-[--border]">
-              <button onClick={() => setSwapPage((p) => Math.max(0, p - 1))} disabled={swapPage === 0} className="text-xs text-[--text-secondary] disabled:opacity-40 hover:text-[--text-primary] transition-colors">← Previous</button>
-              <span className="text-xs text-[--text-secondary]">Page {swapPage + 1}</span>
-              <button onClick={() => setSwapPage((p) => p + 1)} disabled={swaps.length < 50} className="text-xs text-[--text-secondary] disabled:opacity-40 hover:text-[--text-primary] transition-colors">Next →</button>
-            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-1 px-4 py-2.5 border-t border-[--border] flex-wrap">
+                <button
+                  onClick={() => goHistoryPage(safePage - 1)}
+                  disabled={safePage === 1}
+                  className="rounded-lg border border-[--border] bg-[--bg-input] px-3 py-1.5 text-xs font-semibold text-[--text-secondary] disabled:opacity-40 hover:border-[#C9693A]/50 transition-all"
+                >
+                  ← Prev
+                </button>
+                {historyPageNumbers().map((p, i) =>
+                  p === "…" ? (
+                    <span key={`e-${i}`} className="px-1 text-[--text-secondary] text-sm">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => goHistoryPage(p as number)}
+                      className="rounded-lg border px-3 py-1.5 text-xs font-bold transition-all"
+                      style={
+                        p === safePage
+                          ? { background: "#C9693A", borderColor: "#C9693A", color: "#fff" }
+                          : { borderColor: "var(--border)", background: "var(--bg-input)", color: "var(--text-secondary)" }
+                      }
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={() => goHistoryPage(safePage + 1)}
+                  disabled={safePage === totalPages}
+                  className="rounded-lg border border-[--border] bg-[--bg-input] px-3 py-1.5 text-xs font-semibold text-[--text-secondary] disabled:opacity-40 hover:border-[#C9693A]/50 transition-all"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* ── Referral tab ──────────────────────────────────── */}
         {tab === "referral" && <ReferralView address={address} />}
 
+        </div>{/* end shared container */}
       </main>
       <MobileNav />
     </>

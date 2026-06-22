@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { parseUnits, formatUnits } from "viem";
+import { parseUnits } from "viem";
 import { base } from "wagmi/chains";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { TokenSelector }  from "./TokenSelector";
@@ -12,18 +12,20 @@ import { useSwapQuotes }  from "@/hooks/useSwapQuotes";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { useMultiSwap, type SwapRow } from "@/hooks/useMultiSwap";
 import { useTokenPrices } from "@/hooks/useTokenPrice";
+import { formatInputAmount } from "@/lib/utils";
 import { BASE_TOKENS } from "@/constants/tokens";
 import type { SwapQuote } from "@/types/swap";
 import type { Token } from "@/constants/tokens";
 
 // ── Single input row ──────────────────────────────────────────
 function SwapRowItem({
-  row, address, slippage, tokenOut, prices, onUpdate, onRemove, canRemove, onQuote, result, excludeAddresses,
+  row, address, slippage, tokenOut, prices, onUpdate, onRemove, canRemove, onQuote, onInsufficient, result, excludeAddresses,
 }: {
   row: SwapRow; address: `0x${string}` | undefined; slippage: number;
   tokenOut: Token; prices: Record<string, number>;
   onUpdate: (c: Partial<SwapRow>) => void; onRemove: () => void;
   canRemove: boolean; onQuote: (id: number, q: SwapQuote | null) => void;
+  onInsufficient: (id: number, insufficient: boolean) => void;
   result: "pending" | "success" | "error" | undefined;
   excludeAddresses: string[];
 }) {
@@ -39,30 +41,39 @@ function SwapRowItem({
   });
 
   const bestQuote = quotes[0] ?? null;
-  onQuote(row.id, bestQuote);
+
+  // Report quote to parent via useEffect — avoids side-effect-in-render
+  useEffect(() => {
+    onQuote(row.id, bestQuote);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bestQuote?.amountOutFormatted, row.id]);
 
   const amountInWei = row.amountIn
     ? (() => { try { return parseUnits(row.amountIn.replace(",", "."), row.tokenIn.decimals); } catch { return 0n; } })()
     : 0n;
 
-  const isInsufficient = balance > 0n && amountInWei > balance;
-  const balanceFmt = parseFloat(formatUnits(balance, row.tokenIn.decimals)).toFixed(4);
+  const isInsufficient = address ? (amountInWei > 0n && amountInWei > balance) : false;
+
+  // Report insufficient state to parent
+  useEffect(() => {
+    onInsufficient(row.id, isInsufficient);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInsufficient, row.id]);
+  const balanceFmt     = formatInputAmount(balance, row.tokenIn.decimals);
+  const exactBal       = formatInputAmount(balance, row.tokenIn.decimals);
 
   function setPct(pct: number) {
-    if (balance === 0n) {
-      onUpdate({ amountIn: "0" });
-      return;
-    }
+    if (balance === 0n) return;
     if (pct === 1.0) {
-      onUpdate({ amountIn: formatUnits(balance, row.tokenIn.decimals) });
+      onUpdate({ amountIn: exactBal });
     } else {
       const raw = (balance * BigInt(Math.round(pct * 10000))) / 10000n;
-      onUpdate({ amountIn: parseFloat(formatUnits(raw, row.tokenIn.decimals)).toFixed(6).replace(/\.?0+$/, "") });
+      onUpdate({ amountIn: formatInputAmount(raw, row.tokenIn.decimals) });
     }
   }
 
   return (
-    <div className={`rounded-xl border p-2.5 bg-[#f0ebe4] transition-colors ${isInsufficient ? "border-[--accent-red]/50" : "border-[--border]"}`}>
+    <div className={`rounded-xl border p-2.5 bg-[--bg-input] transition-colors ${isInsufficient ? "border-[--accent-red]/50" : "border-[--border]"}`}>
       {/* Header: You pay label + balance */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-[--text-secondary]">You pay</span>
@@ -86,25 +97,17 @@ function SwapRowItem({
         )}
       </div>
 
-      {/* Insufficient warning */}
-      {isInsufficient && (
-        <p className="text-[11px] text-[--accent-red] mb-1.5">
-          {balanceFmt} {row.tokenIn.symbol} (Insufficient)
-        </p>
-      )}
-
       {/* PCT buttons */}
       {address && (
         <div className="flex gap-1 mb-1.5">
           {[["25%", 0.25], ["50%", 0.50], ["75%", 0.75], ["100%", 1.00]].map(([label, pct]) => (
             <button key={label as string} onClick={() => setPct(pct as number)}
-              className="flex-1 rounded-full bg-[#e8ddd4] border border-[--border] py-0 text-[10px] font-semibold text-[--text-secondary] hover:text-white hover:border-[--accent-blue] transition-all leading-5">
+              className="flex-1 rounded-full bg-[--bg-card] border border-[--border] py-0 text-[10px] font-semibold text-[--text-secondary] hover:text-[--text-primary] hover:border-[--accent-blue] transition-all leading-5">
               {label as string}
             </button>
           ))}
         </div>
       )}
-
       {/* Status icons only (no quote amount — shown in You receive box) */}
       {(result === "pending" || result === "success" || result === "error" || (row.amountIn && !bestQuote && !isLoading)) && (
         <div className="flex items-center gap-1 text-[11px] text-[--text-secondary]">
@@ -123,7 +126,7 @@ function SwapRowItem({
 export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: number }) {
   const { address, chainId } = useAccount();
   const { switchChain }      = useSwitchChain();
-  const [tokenOut, setTokenOut] = useState<Token>(BASE_TOKENS[2]);
+  const [tokenOut, setTokenOut] = useState<Token>(BASE_TOKENS[1]);
   const [slippage, setSlippage] = useState(externalSlippage ?? 0.5);
 
   const { rows, addRow, removeRow, updateRow, executing, results, executeAll } = useMultiSwap(address, slippage, tokenOut);
@@ -141,7 +144,13 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
     });
   };
 
-  const canExecute  = rows.some(r => r.amountIn && parseFloat(r.amountIn) > 0);
+  const [insufficientMap, setInsufficientMap] = useState<Record<number, boolean>>({});
+  const handleInsufficient = (id: number, insufficient: boolean) => {
+    setInsufficientMap(prev => prev[id] === insufficient ? prev : { ...prev, [id]: insufficient });
+  };
+
+  const hasInsufficient = Object.values(insufficientMap).some(Boolean);
+  const canExecute = rows.some(r => r.amountIn && parseFloat(r.amountIn) > 0) && !hasInsufficient;
   const isWrongChain = !!address && chainId !== base.id;
 
   // Total USD input value
@@ -163,8 +172,16 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
 
   return (
     <div className="rounded-2xl border border-[--border] bg-[--bg-card] p-3 shadow-2xl w-full max-w-md">
-      {/* Header — slippage settings */}
-      <div className="mb-3 flex justify-end">
+      {/* Header — slippage settings + Add token */}
+      <div className="mb-3 flex items-center justify-between">
+        {rows.length < 3 ? (
+          <button onClick={addRow} className="flex items-center gap-1.5 text-xs text-[--text-secondary] hover:text-[--text-primary] transition-all py-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
+            </svg>
+            Add token (Max 3)
+          </button>
+        ) : <div />}
         <SlippageSettings value={slippage} onChange={setSlippage} />
       </div>
 
@@ -178,6 +195,7 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
               onRemove={() => removeRow(row.id)}
               canRemove={rows.length > 1}
               onQuote={handleQuote}
+              onInsufficient={handleInsufficient}
               result={results[row.id]}
               excludeAddresses={[
                 tokenOut.address,
@@ -187,46 +205,32 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
           ))}
         </div>
 
-      {/* Add row + giriş + çıkış değeri */}
-      <div className="flex items-center gap-2 mb-2">
-        {rows.length < 3 && (
-          <button onClick={addRow} className="flex items-center gap-1.5 text-xs text-[--text-secondary] hover:text-white transition-all py-1">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
-            </svg>
-            Add token (Max 3)
-          </button>
-        )}
-        <div className="ml-auto flex flex-col items-end gap-0.5">
-          {totalUsd > 0 && (
-            <span className="text-[11px] text-[--text-secondary]">
-              Input: <span style={{ color: "#C9693A" }} className="font-semibold">${totalUsd.toFixed(2)}</span>
-            </span>
-          )}
-          {totalOutUsd > 0 && (
-            <span className="text-[11px] text-[--text-secondary]">
-              Output: <span style={{ color: "#C9693A" }} className="font-semibold">${totalOutUsd.toFixed(2)}</span>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Arrow down */}
+      {/* Arrow — centered */}
       <div className="flex justify-center my-1.5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e8ddd4] border border-[--border] text-[--text-secondary]">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 5v14m-7-7l7 7 7-7"/>
+        <button
+          onClick={() => {
+            if (rows.length === 1) {
+              const prevIn  = rows[0].tokenIn;
+              const prevOut = tokenOut;
+              setTokenOut(prevIn);
+              updateRow(rows[0].id, { tokenIn: prevOut, amountIn: "" });
+            }
+          }}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[--bg-input] border border-[--border] text-[--text-secondary] hover:text-[--accent-blue] hover:border-[--accent-blue] transition-all"
+          title="Swap tokens"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 16V4m0 0L3 8m4-4l4 4" /><path d="M17 8v12m0 0l4-4m-4 4l-4-4" />
           </svg>
-        </div>
+        </button>
       </div>
-
       {/* Target token — selectable, swap style */}
-      <div className="mb-2 rounded-xl bg-[#f0ebe4] border border-[--border] p-2.5">
+      <div className="mb-2 rounded-xl bg-[--bg-input] border border-[--border] p-2.5">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-[--text-secondary]">You receive</span>
           {address && (
             <span className="text-xs text-[--text-secondary]">
-              Balance: <span className="text-[--text-primary] font-semibold">{parseFloat(formatUnits(balanceOut, tokenOut.decimals)).toFixed(4)}</span>
+              Balance: <span className="text-[--text-primary] font-semibold">{formatInputAmount(balanceOut, tokenOut.decimals)}</span>
             </span>
           )}
         </div>
@@ -241,6 +245,20 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
       </div>
 
       {/* Action */}
+      {(totalUsd > 0 || totalOutUsd > 0) && (
+        <div className="flex justify-end gap-3 mb-2">
+          {totalUsd > 0 && (
+            <span className="text-[11px] text-[--text-secondary]">
+              Input: <span style={{ color: "#C9693A" }} className="font-semibold">${totalUsd.toFixed(2)}</span>
+            </span>
+          )}
+          {totalOutUsd > 0 && (
+            <span className="text-[11px] text-[--text-secondary]">
+              Output: <span style={{ color: "#C9693A" }} className="font-semibold">${totalOutUsd.toFixed(2)}</span>
+            </span>
+          )}
+        </div>
+      )}
       {!address ? (
         <ConnectButton.Custom>{({ openConnectModal }) => (
           <button onClick={openConnectModal} className="w-full rounded-xl bg-[--accent-blue] py-3 text-sm font-bold text-white hover:brightness-110 transition-all">Connect Wallet</button>
@@ -253,13 +271,15 @@ export function MultiSwapCard({ slippage: externalSlippage }: { slippage?: numbe
           disabled={!canExecute || executing}
           className="w-full rounded-xl py-3 text-sm font-bold transition-all disabled:cursor-not-allowed enabled:hover:brightness-110"
           style={{
-            background: canExecute && !executing ? "linear-gradient(90deg,#C9693A,#B55A2E)" : "#E8DDD0",
-            color:      canExecute && !executing ? "#ffffff" : "#6B5A4E",
+            background: canExecute && !executing ? "linear-gradient(90deg,#C9693A,#B55A2E)" : "var(--bg-input)",
+            color:      canExecute && !executing ? "#ffffff" : "var(--text-secondary)",
           }}
         >
           {executing
             ? <span className="flex items-center justify-center gap-2"><LoadingSpinner size={16} color="white" /> Swapping...</span>
-            : canExecute ? "Swap All" : "Enter amount"}
+            : hasInsufficient ? "Insufficient balance"
+            : canExecute ? "Swap All"
+            : "Enter amount"}
         </button>
       )}
     </div>

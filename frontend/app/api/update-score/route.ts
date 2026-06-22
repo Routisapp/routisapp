@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
     // ── Internal secret check ──────────────────────────────────────────────
     const secret = req.headers.get("x-internal-secret");
     const expectedSecret = process.env.INTERNAL_API_SECRET;
-    if (expectedSecret && secret !== expectedSecret) {
+    // SECURITY: reject if secret is missing OR doesn't match — never allow empty secret
+    if (!expectedSecret || secret !== expectedSecret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

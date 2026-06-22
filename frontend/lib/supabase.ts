@@ -15,11 +15,22 @@ export async function insertSwapRecord(data: {
   dex:          string;
   tx_hash:      string;
   volume_usd:   number;
+  swap_type?:   "swap" | "multi_swap" | "ai_agent"; // puan tipi
 }) {
-  const score_earned = 50;
+  // Puan tipi: swap=100, multi_swap=150, ai_agent=250
+  const score_earned =
+    data.swap_type === "ai_agent"    ? 250 :
+    data.swap_type === "multi_swap"  ? 150 : 100; // POINTS.SWAP default
 
   const { error } = await supabase.from("swap_records").insert({
-    ...data,
+    user_address: data.user_address,
+    token_in:     data.token_in,
+    token_out:    data.token_out,
+    amount_in:    data.amount_in,
+    amount_out:   data.amount_out,
+    dex:          data.dex,
+    tx_hash:      data.tx_hash,
+    volume_usd:   data.volume_usd,
     score_earned,
   });
   if (error) throw error;
@@ -85,7 +96,7 @@ async function upsertUserScore(
         newStreak = (existing.consecutive_days ?? 1) + 1;
         // Award streak bonus every 7 days
         if (newStreak % 7 === 0) {
-          streakBonus = 200; // STREAK_7_DAY bonus
+          streakBonus = 500; // POINTS.STREAK_7_DAY
         }
       } else {
         // Gap detected — reset streak
@@ -152,7 +163,7 @@ async function syncScoreOnChain(address: string, newScore: number): Promise<void
 }
 
 
-export async function fetchLeaderboard(limit = 100) {
+export async function fetchLeaderboard(limit = 10000) {
   const { data, error } = await supabase
     .from("user_scores")
     .select("*")
@@ -183,6 +194,113 @@ export async function fetchSwapHistory(address: string, page = 0, pageSize = 50)
     .range(page * pageSize, (page + 1) * pageSize - 1);
   if (error) throw error;
   return data ?? [];
+}
+
+// ─── Route distribution ───────────────────────────────────────
+/**
+ * RouteStats: one entry per supported DEX, always including ALL DEXes
+ * even if count === 0.  `hasSwaps` lets UI dim zero-usage nodes.
+ */
+export interface RouteStats {
+  /** DEX enum key — matches DexKey in types/swap.ts */
+  id:         string;
+  /** Human-readable display name (from registry) */
+  name:       string;
+  /** Number of swaps via this DEX in the time window */
+  count:      number;
+  /** 0–100, calculated against DEX-only total (wraps excluded) */
+  percentage: number;
+  /** false when count === 0 — UI can render dimmed node */
+  hasSwaps:   boolean;
+}
+
+// WETH utility ops stored in dex column — not real DEX routes, excluded from stats
+const WRAP_UNWRAP_NAMES = new Set([
+  "Wrap ETH → WETH", "Unwrap WETH → ETH", "Wrap", "Unwrap", "WRAP", "UNWRAP",
+]);
+
+/** Maps timeWindow string to a cutoff ISO timestamp, or null for "all time" */
+function windowCutoff(timeWindow: string): string | null {
+  const units: Record<string, number> = { h: 3600, d: 86400, w: 604800 };
+  const m = timeWindow.match(/^(\d+)([hdw])$/);
+  if (!m) return null;                                     // "all" → no filter
+  const ms = parseInt(m[1]) * (units[m[2]] ?? 0) * 1000;
+  return new Date(Date.now() - ms).toISOString();
+}
+
+/**
+ * Calculates the platform-wide DEX usage distribution.
+ *
+ * Key guarantees (matches prompt requirements):
+ *  • Every DEX in SUPPORTED_DEXES appears — percentage 0 if unused.
+ *  • Wrap/unwrap operations are excluded (utility steps, not routes).
+ *  • Filters records by `timeWindow` using `created_at` column.
+ *  • Sorted: active DEXes desc by count, then zero-count entries alphabetically.
+ *
+ * @param timeWindow  e.g. "7d", "24h", "30d", "all" (default "7d")
+ */
+export async function fetchRouteStats(timeWindow = "7d"): Promise<RouteStats[]> {
+  // Static import — dynamic import causes issues in some Next.js client contexts
+  const { SUPPORTED_DEXES } = await import("@/constants/dex-registry");
+
+  // Build Supabase query — filter by time window if applicable
+  const cutoff = windowCutoff(timeWindow);
+  let query = supabase.from("swap_records").select("dex, created_at");
+  if (cutoff) {
+    query = query.gte("created_at", cutoff);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[fetchRouteStats] Supabase error:", error);
+    throw new Error(error.message ?? "Supabase query failed");
+  }
+
+  // Count per DEX name (excludes wrap/unwrap rows)
+  const counts = new Map<string, number>();
+  for (const row of (data ?? [])) {
+    const name = (row.dex as string) || "";
+    if (!name || WRAP_UNWRAP_NAMES.has(name)) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  // Total only across known DEX names (unknown rows don't inflate denominator)
+  const knownNames = new Set(SUPPORTED_DEXES.map(d => d.name));
+  const total = [...counts.entries()]
+    .filter(([name]) => knownNames.has(name))
+    .reduce((acc, [, c]) => acc + c, 0);
+
+  // LEFT JOIN: every registry DEX gets an entry, missing ones get count=0
+  const result: RouteStats[] = SUPPORTED_DEXES.map(dex => {
+    const count = counts.get(dex.name) ?? 0;
+    return {
+      id:         dex.id,
+      name:       dex.name,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 10000) / 100 : 0,
+      hasSwaps:   count > 0,
+    };
+  });
+
+  // Sort: active first (desc by count), then unused alphabetically
+  result.sort((a, b) =>
+    a.count !== b.count ? b.count - a.count : a.name.localeCompare(b.name),
+  );
+
+  // Append any DB names not in registry (never silently lose data)
+  for (const [name, count] of counts.entries()) {
+    if (!knownNames.has(name)) {
+      result.push({
+        id:         name.toUpperCase().replace(/\s+/g, "_"),
+        name,
+        count,
+        percentage: total > 0 ? Math.round((count / total) * 10000) / 100 : 0,
+        hasSwaps:   true,
+      });
+    }
+  }
+
+  return result;
 }
 
 // ─── Referral ─────────────────────────────────────────────────
@@ -229,6 +347,54 @@ export async function addReferralReward(referrer: string, referee: string, swapT
   if (error) throw error;
   // Add points to referrer
   await upsertUserScore(referrer, { score_delta: points });
+}
+
+/** Get the date of the first ever Routis swap for an address */
+export async function fetchFirstSwapDate(address: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("swap_records")
+    .select("created_at")
+    .eq("user_address", address.toLowerCase())
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .single();
+  return data?.created_at ?? null;
+}
+
+/** Upsert wallet score for leaderboard — called after wallet stats are computed */
+export async function upsertWalletScore(entry: {
+  address:         string;
+  wallet_score:    number;
+  total_txs:       number;
+  wallet_age_days: number;
+  base_volume_usd: number;
+  gas_fees_eth:    string;
+  unique_addresses: number;
+}) {
+  const { error } = await supabase
+    .from("wallet_score_leaderboard")
+    .upsert({
+      address:          entry.address.toLowerCase(),
+      wallet_score:     entry.wallet_score,
+      total_txs:        entry.total_txs,
+      wallet_age_days:  entry.wallet_age_days,
+      base_volume_usd:  entry.base_volume_usd,
+      gas_fees_eth:     entry.gas_fees_eth,
+      unique_addresses: entry.unique_addresses,
+      updated_at:       new Date().toISOString(),
+    }, { onConflict: "address" });
+  if (error) console.warn("[upsertWalletScore]", error.message);
+}
+
+/** Fetch top wallet score leaderboard entries */
+export async function fetchWalletScoreLeaderboard(limit = 50) {
+  const { data, error } = await supabase
+    .from("wallet_score_leaderboard")
+    .select("address, wallet_score, total_txs, wallet_age_days, base_volume_usd, updated_at")
+    .order("wallet_score", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
 }
 
 /** Check if address was referred and get referrer */

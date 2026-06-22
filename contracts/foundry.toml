@@ -1,0 +1,22 @@
+[profile.default]
+src     = "src"
+out     = "out"
+libs    = ["lib"]
+test    = "test"
+script  = "script"
+solc    = "0.8.24"
+
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/"
+]
+
+# RPC endpoint'leri
+[rpc_endpoints]
+base         = "https://mainnet.base.org"
+base_sepolia = "https://sepolia.base.org"
+
+# Basescan doğrulaması
+[etherscan]
+base         = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=8453" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=84532" }

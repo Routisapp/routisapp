@@ -12,11 +12,8 @@ export function TxStatusBadge({ txHash }: Props) {
 
   if (status === "pending") {
     return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-        style={{ background: "#FAEEDA", color: "#854F0B" }}
-      >
-        <LoadingSpinner size={10} color="#854F0B" />
+      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-[#C9693A]/15 text-[#C9693A]">
+        <LoadingSpinner size={10} color="#C9693A" />
         Pending
       </span>
     );
@@ -24,10 +21,7 @@ export function TxStatusBadge({ txHash }: Props) {
 
   if (status === "success") {
     return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-        style={{ background: "#EAF3DE", color: "#3B6D11" }}
-      >
+      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-green-500/15 text-green-600 dark:text-green-400">
         ✓ Completed
       </span>
     );
@@ -36,8 +30,8 @@ export function TxStatusBadge({ txHash }: Props) {
   // failed
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-      style={{ background: "#FCEBEB", color: "#A32D2D" }}
+      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-600 dark:text-red-400"
+      title={errorReason}
     >
       ✗ Failed
     </span>

@@ -35,7 +35,7 @@ export function SlippageSettings({ value, onChange }: Props) {
                 className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-all ${
                   value === p
                     ? "bg-[--accent-blue] text-white"
-                    : "bg-[--bg-input] text-[--text-secondary] hover:text-white"
+                    : "bg-[--bg-input] text-[--text-secondary] hover:text-[--text-primary]"
                 }`}
               >
                 {p}%

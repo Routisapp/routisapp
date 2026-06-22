@@ -29,7 +29,7 @@ const connectors = connectorsForWallets(
     },
   ],
   {
-    appName:   "Agex",
+    appName:   "Routis",
     projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "a229ba28beb005bc1db48e73d6c3585f",
   },
 );

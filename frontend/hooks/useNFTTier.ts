@@ -54,5 +54,9 @@ export function useNFTTier(address: `0x${string}` | undefined) {
     unlocked:  score >= tier.requiredScore,
   }));
 
-  return { score, currentTier, mintedTiers, userScore };
+  function refetchMinted() {
+    mintedChecks.forEach((c) => c.refetch());
+  }
+
+  return { score, currentTier, mintedTiers, userScore, refetchMinted };
 }

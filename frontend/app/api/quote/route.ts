@@ -1,6 +1,13 @@
+/**
+ * /api/quote — thin server-side fallback.
+ *
+ * The primary quote path is now client-side via useSwapQuotes → getOnchainQuotes.
+ * This route is kept for any server-side callers (e.g. og-image, bots).
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { getMulticallQuotes } from "@/lib/dex/multicallQuote";
-import type { SwapParams } from "@/types/swap";
+import { viemClient }       from "@/lib/viemClient";
+import { getOnchainQuotes } from "@/lib/onchainQuote";
+import type { SwapParams }  from "@/types/swap";
 
 export const dynamic = "force-dynamic";
 
@@ -19,19 +26,32 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
-  const WETH       = "0x4200000000000000000000000000000000000006";
+  // SECURITY: validate amountIn is a safe integer string before passing to BigInt
+  if (!/^\d{1,78}$/.test(amountIn)) {
+    return NextResponse.json({ error: "Invalid amountIn: must be a positive integer string" }, { status: 400 });
+  }
+
+  // SECURITY: validate token addresses are valid checksummed-like hex
+  if (!/^0x[a-fA-F0-9]{40}$/.test(tokenIn) || !/^0x[a-fA-F0-9]{40}$/.test(tokenOut)) {
+    return NextResponse.json({ error: "Invalid token address format" }, { status: 400 });
+  }
+
+  // SECURITY: validate decimals are safe numbers
+  const decIn  = Number(decimalsIn);
+  const decOut = Number(decimalsOut);
+  if (!Number.isInteger(decIn) || !Number.isInteger(decOut) || decIn < 0 || decIn > 18 || decOut < 0 || decOut > 18) {
+    return NextResponse.json({ error: "Invalid decimals: must be integer 0-18" }, { status: 400 });
+  }
 
   const params: SwapParams = {
-    tokenIn:     tokenIn  === NATIVE_ETH ? WETH : tokenIn,
-    tokenOut:    tokenOut === NATIVE_ETH ? WETH : tokenOut,
+    tokenIn,
+    tokenOut,
     amountIn:    BigInt(amountIn),
-    decimalsIn:  Number(decimalsIn),
-    decimalsOut: Number(decimalsOut),
+    decimalsIn:  decIn,
+    decimalsOut: decOut,
   };
 
-  // Single multicall — all DEXes in ONE RPC request
-  const quotes = await getMulticallQuotes(params);
+  const quotes = await getOnchainQuotes(viemClient, params);
 
   const serialized = quotes.map(q => ({
     ...q,

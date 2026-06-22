@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address")?.toLowerCase();
   if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
 
+  // SECURITY: validate address is a valid ERC-20/EOA hex address before using in URLs
+  if (!/^0x[a-f0-9]{40}$/.test(address)) {
+    return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
+  }
+
   for (const source of SOURCES) {
     try {
       const res = await fetch(source(address), { method: "HEAD" });

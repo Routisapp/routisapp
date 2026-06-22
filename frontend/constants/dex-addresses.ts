@@ -1,15 +1,21 @@
-export const DEX_ROUTERS = {
-  UNISWAP_V3:     "0x2626664c2603336E57B271c5C0b26F421741e481",
-  AERODROME:      "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43",
-  SUSHISWAP:      "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891",
-  PANCAKESWAP_V3: "0x678Aa4bF4E210cf2166753e054d5b7c31cc7fa86",
-} as const;
+/**
+ * dex-addresses.ts — Backward-compatibility re-exports
+ *
+ * The canonical DEX registry has moved to constants/dex-registry.ts.
+ * This file re-exports the shapes that existing imports expect so that
+ * no call-site outside this constants/ folder needs to change.
+ *
+ * DO NOT add new DEX data here — edit dex-registry.ts instead.
+ */
 
-export const UNISWAP_QUOTER_V2 = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a";
+export {
+  SUPPORTED_DEXES,
+  DEX_BY_ID,
+  DEX_ROUTER_ADDRESS as DEX_ROUTERS,
+  DEX_DISPLAY_NAME   as DEX_NAMES,
+  AERODROME_FACTORY,
+} from "@/constants/dex-registry";
 
-export const DEX_NAMES: Record<keyof typeof DEX_ROUTERS, string> = {
-  UNISWAP_V3:     "Uniswap V3",
-  AERODROME:      "Aerodrome",
-  SUSHISWAP:      "SushiSwap",
-  PANCAKESWAP_V3: "PancakeSwap V3",
-};
+// UNISWAP_QUOTER_V2 — kept here for any remaining direct imports
+import { DEX_BY_ID } from "@/constants/dex-registry";
+export const UNISWAP_QUOTER_V2 = DEX_BY_ID["UNISWAP_V3"].quoterAddress!;

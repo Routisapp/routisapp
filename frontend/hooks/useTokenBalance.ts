@@ -11,7 +11,7 @@ export function useTokenBalance(address: `0x${string}` | undefined, tokenAddress
     address,
     query: {
       enabled:         !!address && isNative,
-      refetchInterval: 10_000, // refresh every 10s
+      refetchInterval: 3_000, // refresh every 3s
     },
   });
 
@@ -22,7 +22,7 @@ export function useTokenBalance(address: `0x${string}` | undefined, tokenAddress
     args:         address ? [address] : undefined,
     query: {
       enabled:         !!address && !isNative,
-      refetchInterval: 10_000, // refresh every 10s
+      refetchInterval: 3_000, // refresh every 3s
     },
   });
 

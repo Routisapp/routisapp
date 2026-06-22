@@ -12,13 +12,13 @@ export function useLeaderboard() {
   const query = useQuery({
     queryKey: ["leaderboard"],
     queryFn: async (): Promise<LeaderboardEntry[]> => {
-      const data = await fetchLeaderboard(100);
+      const data = await fetchLeaderboard(10000);
       return data.map((row, i) => {
         const tier = getTierFromScore(row.score);
         return { ...row, rank: i + 1, tier_name: tier.name, tier_id: tier.id };
       });
     },
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   // Realtime subscription
