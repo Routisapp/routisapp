@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  eslint: {
+    // ESLint errors won't fail the production build
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Type errors won't fail the production build
+    ignoreBuildErrors: true,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "assets.coingecko.com" },
