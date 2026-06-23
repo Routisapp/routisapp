@@ -240,7 +240,7 @@ export function AgentChat() {
                 </div>
 
                 {/* Example buttons */}
-                <p className="text-xs text-[--text-secondary] text-center" style={{ opacity: 0.7 }}>
+                <p className="text-xs text-[--text-secondary] text-center">
                   You need USDC in your wallet for the x402 AI Agent to work.
                 </p>
                 <div className="inline-flex flex-wrap gap-3 justify-center">
