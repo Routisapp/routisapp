@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { toast }          from "sonner";
 import { Header }         from "@/components/layout/Header";
@@ -85,6 +85,7 @@ function TaskRow({ icon, title, desc, pts }: { icon: React.ReactNode; title: str
 
 export default function MintPage() {
   const { address }        = useAccount();
+  const publicClient       = usePublicClient();
   const { score, mintedTiers, refetchMinted } = useNFTTier(address);
   const { writeContractAsync } = useWriteContract();
   const [mintingTier, setMintingTier] = useState<number | null>(null);
@@ -156,13 +157,18 @@ export default function MintPage() {
     if (!address || !TRADER_NFT_ADDRESS) return;
     setMintingTier(tierId);
     try {
-      fetch(`/api/sync-before-mint`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAddress: address, score }),
-      }).catch(console.error);
+      // Sync on-chain score before mint and wait for it
+      toast.loading("Syncing score on-chain...", { id: "mint" });
+      try {
+        await fetch(`/api/sync-before-mint`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userAddress: address, score }),
+        });
+        // Give the chain a moment to process the sync tx
+        await new Promise((r) => setTimeout(r, 4000));
+      } catch { /* non-blocking — proceed anyway */ }
 
-      await new Promise((r) => setTimeout(r, 3000));
       toast.loading(`Minting ${NFT_TIERS[tierId].name} NFT...`, { id: "mint" });
 
       const hash = await writeContractAsync({
@@ -172,6 +178,16 @@ export default function MintPage() {
         args:         [BigInt(tierId)],
       });
       setTxHash(hash);
+
+      // Wait for on-chain confirmation BEFORE awarding points
+      // This prevents the 100-point exploit (reject tx but still get points)
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+      } else {
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+
+      // Only award points after confirmed on-chain
       await addMintScore(address).catch(console.error);
       refetchMinted();
       toast.success("NFT minted! +100 points", {
