@@ -30,7 +30,7 @@ export function SocialDock() {
 
         {/* GitHub */}
         <a
-          href="https://github.com/routis-fi"
+          href="https://github.com/Routisapp/routisapp"
           target="_blank"
           rel="noopener noreferrer"
           aria-label="GitHub"
