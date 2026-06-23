@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ── Table of Contents entries ─────────────────────────────────
 const TOC = [
@@ -417,6 +418,7 @@ export function DocsModal({ onClose }: DocsModalProps) {
             style={{ scrollbarWidth: "thin" }}
           >
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 h1: ({ children }) => (
                   <h1 className="text-2xl font-bold text-[--text-primary] mb-6 mt-2">{children}</h1>
