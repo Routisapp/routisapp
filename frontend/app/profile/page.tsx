@@ -259,7 +259,7 @@ export default function ProfilePage() {
           <div className="flex items-center justify-center gap-2 mb-0 flex-wrap">
             <span
               className="font-mono"
-              style={{ fontSize: 11, fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.01em", wordBreak: "keep-all", whiteSpace: "nowrap" }}
+              style={{ fontSize: "clamp(11px, 2.5vw, 15px)", fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.01em", wordBreak: "keep-all", whiteSpace: "nowrap" }}
             >
               {address}
             </span>
