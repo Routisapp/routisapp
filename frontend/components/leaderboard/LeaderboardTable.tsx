@@ -70,13 +70,15 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
 
       {/* ── Table wrapper ── */}
       <div className="rounded-2xl border border-[--border] bg-[--bg-card] overflow-hidden">
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: 420 }}>
 
         {/* Column headers */}
-        <div className="grid grid-cols-[28px_1fr_72px_28px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-[--border]">
+        <div className="grid grid-cols-[28px_1fr_72px_80px_64px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-[--border]">
           {["#", "TRADER", "SCORE", "VOLUME", "SWAPS"].map((h, i) => (
             <span
               key={h}
-              className={`text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] ${i >= 3 ? "hidden sm:block" : ""}`}
+              className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]"
               style={i > 1 ? { textAlign: "right" } : undefined}
             >
               {h}
@@ -102,7 +104,7 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
             return (
               <div
                 key={entry.address}
-                className="grid grid-cols-[28px_1fr_72px_28px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 border-b border-[--border] last:border-0 items-center transition-colors hover:bg-[--bg-input]"
+                className="grid grid-cols-[28px_1fr_72px_80px_64px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 border-b border-[--border] last:border-0 items-center transition-colors hover:bg-[--bg-input]"
                 style={isUser ? { background: "var(--bg-input)" } : undefined}
               >
                 {/* Rank */}
@@ -128,7 +130,7 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
                     <span className="font-mono text-xs sm:text-sm font-bold text-[--text-primary] truncate">
                       {shortAddress(entry.address)}
                     </span>
-                    <span className="text-[10px] font-semibold hidden sm:block" style={{ color: TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked }}>
+                    <span className="text-[10px] font-semibold" style={{ color: TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked }}>
                       {entry.tier_name} Trader
                     </span>
                   </div>
@@ -139,19 +141,21 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
                   {formatNumber(entry.score)}
                 </span>
 
-                {/* Volume — hidden on mobile */}
-                <span className="text-sm font-semibold text-right text-[--text-primary] hidden sm:block">
+                {/* Volume */}
+                <span className="text-xs sm:text-sm font-semibold text-right text-[--text-primary]">
                   {formatUsd(entry.volume_usd)}
                 </span>
 
-                {/* Swaps — hidden on mobile */}
-                <span className="text-sm font-semibold text-right text-[--text-primary] hidden sm:block">
+                {/* Swaps */}
+                <span className="text-xs sm:text-sm font-semibold text-right text-[--text-primary]">
                   {entry.swap_count}
                 </span>
               </div>
             );
           })
         )}
+          </div>
+        </div>
       </div>
 
       {/* ── Pagination ── */}
