@@ -128,20 +128,15 @@ export function Header() {
               if (!account || !chain) {
                 return (
                   <>
-                    {/* Mobile: icon only */}
+                    {/* Mobile: compact button */}
                     <button
                       onClick={openConnectModal}
-                      className="flex md:hidden h-8 w-8 items-center justify-center rounded-xl text-white transition-all hover:brightness-110"
+                      className="flex md:hidden items-center rounded-xl px-3 py-1.5 text-xs font-bold text-white transition-all hover:brightness-110 whitespace-nowrap"
                       style={{ background: "#C9693A" }}
-                      aria-label="Connect Wallet"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="7" width="20" height="14" rx="2"/>
-                        <path d="M16 11v2"/>
-                        <path d="M2 11h20"/>
-                      </svg>
+                      Connect Wallet
                     </button>
-                    {/* Desktop: full text */}
+                    {/* Desktop: full size */}
                     <button
                       onClick={openConnectModal}
                       className="hidden md:flex rounded-xl px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110"
