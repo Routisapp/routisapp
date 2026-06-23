@@ -282,6 +282,17 @@ export function useSwapExecute(onSuccess?: () => void) {
         action: { label: "View on Basescan", onClick: () => window.open(basescanTx(hash)) },
       });
 
+      // Fetch price first, then insert with real volume in a single atomic call
+      const pricePromise = fetchTokenPrice(params.tokenIn);
+
+      const volumeUsd = await (async () => {
+        try {
+          const price = await pricePromise;
+          const amountNum = parseFloat(formatUnits(params.amountIn, params.decimalsIn));
+          return price * amountNum;
+        } catch { return 0; }
+      })();
+
       insertSwapRecord({
         user_address: userAddress.toLowerCase(),
         token_in:     params.tokenIn,
@@ -290,44 +301,9 @@ export function useSwapExecute(onSuccess?: () => void) {
         amount_out:   params.quote.amountOut.toString(),
         dex:          params.quote.dexName,
         tx_hash:      hash,
-        volume_usd:   0,
+        volume_usd:   volumeUsd,
         swap_type:    swapType,
       }).then(async () => {
-        // Calculate real volume_usd and update
-        try {
-          const price = await fetchTokenPrice(params.tokenIn);
-          // Fix 5: Use formatUnits (viem) instead of Number(bigint) to avoid precision loss
-          // for large amounts with 18 decimals (Number() loses precision beyond MAX_SAFE_INTEGER).
-          const amountNum = parseFloat(formatUnits(params.amountIn, params.decimalsIn));
-          const volumeUsd = price * amountNum;
-          if (volumeUsd > 0) {
-            // Single import — Fix 6: removed duplicate import("@/lib/supabase") calls
-            const { supabase } = await import("@/lib/supabase");
-
-            // update the record with real volume
-            await supabase
-              .from("swap_records")
-              .update({ volume_usd: volumeUsd })
-              .eq("tx_hash", hash);
-
-            // TODO (Fix 6 — race condition risk): The read-then-write pattern below is NOT atomic.
-            // If two swaps complete concurrently for the same user, one volume update may overwrite
-            // the other (lost update). To fix properly, replace with a Postgres RPC:
-            //   await supabase.rpc("increment_volume", { user_addr: userAddress.toLowerCase(), amount: volumeUsd })
-            // where increment_volume does: UPDATE user_scores SET volume_usd = volume_usd + amount WHERE address = user_addr
-            const { data: existing } = await supabase
-              .from("user_scores")
-              .select("volume_usd")
-              .eq("address", userAddress.toLowerCase())
-              .single();
-            if (existing) {
-              await supabase
-                .from("user_scores")
-                .update({ volume_usd: (existing.volume_usd ?? 0) + volumeUsd })
-                .eq("address", userAddress.toLowerCase());
-            }
-          }
-        } catch { /* non-blocking */ }
         // Referral reward
         try {
           const { getReferrer: getRef, addReferralReward: addReward } = await import("@/lib/supabase");
