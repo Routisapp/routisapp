@@ -147,7 +147,7 @@ export function AgentChat() {
         );
         if (!feeRes.ok) {
           const rawText = await feeRes.text().catch(() => "");
-          let errMsg = "Fee payment failed";
+          let errMsg = "Fee payment failed — make sure you have USDC in your wallet";
           try { errMsg = JSON.parse(rawText)?.error ?? rawText ?? errMsg; } catch { errMsg = rawText || errMsg; }
           throw new Error(errMsg);
         }

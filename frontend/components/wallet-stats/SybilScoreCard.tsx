@@ -126,7 +126,7 @@ export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
     } catch (err: unknown) {
       const msg = (err instanceof Error ? err.message : "").toLowerCase();
       toast.error(
-        msg.includes("user rejected") ? "Transaction rejected" : "Payment failed — try again",
+        msg.includes("user rejected") ? "Transaction rejected" : "Payment failed — make sure you have USDC in your wallet",
         { id: "sybil-pay" },
       );
       setPayState("locked");
