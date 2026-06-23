@@ -169,7 +169,7 @@ export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
               className="w-full rounded-xl py-2.5 text-sm font-bold text-white transition-all hover:brightness-110"
               style={{ background: "linear-gradient(90deg,#C9693A,#B55A2E)" }}
             >
-              Reveal Score — {PAYMENT_ETH_LABEL}
+              Mint Sybil Score — {PAYMENT_ETH_LABEL}
             </button>
           ) : (
             <div
