@@ -130,9 +130,20 @@ export function SwapLayout() {
     if (isUnwrap) { await unwrap(amountInWei); setAmountIn(""); refetchBalance(); refetchBalanceOut(); return; }
     if (!activeQuote) return;
     if (needsApproval) { await approve(); return; }
-    if (!isWethEthPair) await refetchQuotes();
+
+    // Refetch quotes and use the freshest data; fall back to cached activeQuote
+    let quoteToUse = activeQuote;
+    if (!isWethEthPair) {
+      try {
+        const result = await refetchQuotes();
+        const freshQuotes = result.data ?? [];
+        const fresh = freshQuotes.find((q) => q.dex === selectedDex) ?? freshQuotes[0];
+        if (fresh) quoteToUse = fresh;
+      } catch { /* use cached quote */ }
+    }
+
     await execute(
-      { quote: activeQuote, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountInWei, slippage, recipient: address, decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals },
+      { quote: quoteToUse, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountInWei, slippage, recipient: address, decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals },
       address,
     );
     // Clear input after successful swap (execute throws on failure, so this only runs on success)

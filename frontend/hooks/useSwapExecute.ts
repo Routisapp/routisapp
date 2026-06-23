@@ -139,9 +139,17 @@ export function useSwapExecute(onSuccess?: () => void) {
     setStatus("swapping");
     toast.loading("Sending transaction...", { id: "swap" });
 
-    // Fix 3: Fail early if walletClient is not ready — prevents silent approve skip
-    // which would cause the swap to revert on-chain (wasting gas) with insufficient allowance.
-    if (!walletClient) {
+    // Wait up to 2s for walletClient to be ready (handles first-render undefined)
+    let client = walletClient;
+    if (!client) {
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        client = walletClient;
+        if (client) break;
+      }
+    }
+
+    if (!client) {
       setStatus("error");
       toast.error("Wallet not connected — please try again", { id: "swap" });
       throw new Error("Wallet client not ready");
@@ -170,7 +178,7 @@ export function useSwapExecute(onSuccess?: () => void) {
                                                    DEX_ROUTERS.SUSHISWAP
         ) as `0x${string}`;
 
-        const allowance = await walletClient.readContract({
+        const allowance = await client.readContract({
           address:      tokenIn,
           abi:          erc20Abi,
           functionName: "allowance",
@@ -185,7 +193,7 @@ export function useSwapExecute(onSuccess?: () => void) {
             functionName: "approve",
             args:         [spender, maxUint256],
           });
-          await walletClient.waitForTransactionReceipt({ hash: approveTx });
+          await client.waitForTransactionReceipt({ hash: approveTx });
           toast.loading("Sending transaction...", { id: "swap" });
         }
       }
@@ -264,7 +272,7 @@ export function useSwapExecute(onSuccess?: () => void) {
 
       // Wait for tx to be confirmed before refreshing balances & stats
       try {
-        await walletClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+        await client.waitForTransactionReceipt({ hash, confirmations: 1 });
       } catch { /* non-blocking — proceed even if receipt polling fails */ }
 
       setStatus("success");
