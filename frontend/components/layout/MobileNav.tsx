@@ -36,7 +36,7 @@ const IconAgent = () => (
 const NAV = [
   { href: "/swap",         label: "Swap",   Icon: IconSwap       },
   { href: "/agent",        label: "Agent",  Icon: IconAgent      },
-  { href: "/wallet-stats", label: "Base Stats",  Icon: IconBarChart   },
+  { href: "/wallet-stats", label: "Stats",  Icon: IconBarChart   },
   { href: "/leaderboard",  label: "Board",  Icon: IconMedal      },
   { href: "/mint",         label: "Reward", Icon: IconDiamond    },
   { href: "/profile",      label: "Profile",Icon: IconUserCircle },
@@ -54,7 +54,7 @@ export function MobileNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+              className={`flex flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[10px] font-semibold transition-all ${
                 active ? "text-[--accent-blue]" : "text-[--text-secondary]"
               }`}
             >

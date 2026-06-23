@@ -316,11 +316,11 @@ export default function ProfilePage() {
         {tab === "history" && (
           <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-2.5 border-b border-[--border] text-[11px] font-bold uppercase tracking-wide text-[--text-secondary]">
+            <div className="grid grid-cols-[1fr_60px_80px_28px] sm:grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-2.5 border-b border-[--border] text-[11px] font-bold uppercase tracking-wide text-[--text-secondary]">
               <div>Transaction</div>
               <div className="text-right">Pts</div>
               <div className="text-right">Time</div>
-              <div className="text-right">Status</div>
+              <div className="text-right hidden sm:block">Status</div>
               <div />
             </div>
 
@@ -339,14 +339,11 @@ export default function ProfilePage() {
                 return (
                   <div
                     key={s.id}
-                    className="grid grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-3 border-b border-[--border] last:border-0 items-center"
+                    className="grid grid-cols-[1fr_60px_80px_28px] sm:grid-cols-[1fr_60px_90px_100px_28px] gap-2 px-4 py-3 border-b border-[--border] last:border-0 items-center"
                   >
-                    {/* Transaction: token pair in a single borderless pill */}
+                    {/* Transaction: token pair */}
                     <div className="min-w-0">
-                      <div
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border border-[--border] overflow-hidden"
-                        style={{ width: 180, minWidth: 180, maxWidth: 180 }}
-                      >
+                      <div className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border border-[--border] overflow-hidden max-w-full">
                         <TokenDisplay address={s.token_in} />
                         <span className="text-[--text-secondary] text-xs shrink-0">→</span>
                         <TokenDisplay address={s.token_out} />
@@ -361,12 +358,12 @@ export default function ProfilePage() {
                       <div className="text-xs font-semibold text-[--text-primary]">
                         {timeAgo(s.created_at)}
                       </div>
-                      <div className="text-[10px] text-[--text-secondary] mt-0.5">
+                      <div className="text-[10px] text-[--text-secondary] mt-0.5 hidden sm:block">
                         {new Date(s.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
                       </div>
                     </div>
-                    {/* Status */}
-                    <div className="flex justify-end">
+                    {/* Status — hidden on mobile */}
+                    <div className="hidden sm:flex justify-end">
                       <TxStatusBadge txHash={s.tx_hash} />
                     </div>
                     {/* Basescan link */}

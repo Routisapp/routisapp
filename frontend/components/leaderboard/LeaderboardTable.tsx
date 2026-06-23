@@ -72,11 +72,11 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
       <div className="rounded-2xl border border-[--border] bg-[--bg-card] overflow-hidden">
 
         {/* Column headers */}
-        <div className="grid grid-cols-[36px_1fr_80px_96px_80px] gap-3 px-5 py-3 border-b border-[--border]">
+        <div className="grid grid-cols-[28px_1fr_72px_28px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-[--border]">
           {["#", "TRADER", "SCORE", "VOLUME", "SWAPS"].map((h, i) => (
             <span
               key={h}
-              className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]"
+              className={`text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] ${i >= 3 ? "hidden sm:block" : ""}`}
               style={i > 1 ? { textAlign: "right" } : undefined}
             >
               {h}
@@ -102,7 +102,7 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
             return (
               <div
                 key={entry.address}
-                className="grid grid-cols-[36px_1fr_80px_96px_80px] gap-3 px-5 py-3.5 border-b border-[--border] last:border-0 items-center transition-colors hover:bg-[--bg-input]"
+                className="grid grid-cols-[28px_1fr_72px_28px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 border-b border-[--border] last:border-0 items-center transition-colors hover:bg-[--bg-input]"
                 style={isUser ? { background: "var(--bg-input)" } : undefined}
               >
                 {/* Rank */}
@@ -111,12 +111,12 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
                 </span>
 
                 {/* Trader */}
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   {/* Tier avatar */}
                   <div
-                    className="shrink-0 flex items-center justify-center rounded-full text-lg"
+                    className="shrink-0 flex items-center justify-center rounded-full text-base sm:text-lg"
                     style={{
-                      width: 36, height: 36,
+                      width: 28, height: 28,
                       background: `${TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked}33`,
                       border: `1.5px solid ${TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked}88`,
                     }}
@@ -125,27 +125,27 @@ export function LeaderboardTable({ entries, isLoading }: Props) {
                   </div>
                   {/* Address + tier name */}
                   <div className="flex flex-col min-w-0">
-                    <span className="font-mono text-sm font-bold text-[--text-primary]">
+                    <span className="font-mono text-xs sm:text-sm font-bold text-[--text-primary] truncate">
                       {shortAddress(entry.address)}
                     </span>
-                    <span className="text-[11px] font-semibold" style={{ color: TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked }}>
+                    <span className="text-[10px] font-semibold hidden sm:block" style={{ color: TIER_COLOR[entry.tier_name] ?? TIER_COLOR.Unranked }}>
                       {entry.tier_name} Trader
                     </span>
                   </div>
                 </div>
 
                 {/* Score */}
-                <span className="text-sm font-black text-right" style={{ color: "#C9693A" }}>
+                <span className="text-xs sm:text-sm font-black text-right" style={{ color: "#C9693A" }}>
                   {formatNumber(entry.score)}
                 </span>
 
-                {/* Volume */}
-                <span className="text-sm font-semibold text-right text-[--text-primary]">
+                {/* Volume — hidden on mobile */}
+                <span className="text-sm font-semibold text-right text-[--text-primary] hidden sm:block">
                   {formatUsd(entry.volume_usd)}
                 </span>
 
-                {/* Swaps */}
-                <span className="text-sm font-semibold text-right text-[--text-primary]">
+                {/* Swaps — hidden on mobile */}
+                <span className="text-sm font-semibold text-right text-[--text-primary] hidden sm:block">
                   {entry.swap_count}
                 </span>
               </div>

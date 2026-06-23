@@ -70,7 +70,7 @@ export function StatCards() {
   return (
     <div className="grid grid-cols-1 gap-3 mb-6">
       {/* ── User personal stats ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {userCards.map((c) => (
           <div
             key={c.label}
@@ -112,7 +112,7 @@ export function AggregateCards() {
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {cards.map((c) => (
         <div
           key={c.label}

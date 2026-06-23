@@ -231,7 +231,7 @@ export function SwapLayout() {
 
         {/* Exchange rate info */}
         {activeQuote && amountInWei > 0n && !isWethEthPair && (
-          <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-[--bg-input] border border-[--border] px-2.5 py-1.5">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-[--bg-input] border border-[--border] px-2.5 py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/>
             </svg>
@@ -245,7 +245,7 @@ export function SwapLayout() {
               </span>{" "}
               {tokenOut.symbol}
             </span>
-            <span className="ml-auto text-[11px] text-[--text-secondary]">
+            <span className="sm:ml-auto text-[11px] text-[--text-secondary]">
               ≈ 1 {tokenOut.symbol} ={" "}
               <span className="text-[--text-primary] font-semibold">
                 {(

@@ -167,7 +167,7 @@ export default function MintPage() {
           </div>
 
           {/* Progress stepper — mint butonlarıyla aynı grid genişliği */}
-          <div className="grid grid-cols-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 mb-4">
             {NFT_TIERS.map((tier, i) => {
               const isActive = score >= tier.requiredScore;
               const isLast   = i === NFT_TIERS.length - 1;
@@ -211,7 +211,7 @@ export default function MintPage() {
 
           {/* Mint buttons */}
           {address ? (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {resolvedTiers.map((tier) => {
                 const isMinting = mintingTier === tier.id && isConfirming;
                 if (tier.minted) {

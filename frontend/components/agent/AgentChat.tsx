@@ -210,7 +210,7 @@ export function AgentChat() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: "calc(100vh - 56px - 30px)", background: "var(--bg-primary)" }}
+      style={{ height: "calc(100dvh - 56px - 64px)", background: "var(--bg-primary)" }}
     >
 
       {/* Messages — scrollable */}
