@@ -63,37 +63,39 @@ export function StatCards() {
 
   return (
     <div className="grid grid-cols-1 gap-3 mb-6">
-      {/* ── Wallet rank card — columns aligned with leaderboard table ── */}
+      {/* ── Wallet rank card — horizontally scrollable on mobile ── */}
       <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
-        <div className="grid grid-cols-[28px_1fr_72px_28px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 items-center">
-          {/* Left: YOUR WALLET RANK label + rank value (spans # + TRADER columns) */}
-          <div className="col-span-2 flex flex-col gap-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.04em] text-[--text-secondary]">Your wallet rank</span>
-            <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
-          </div>
+        <div className="overflow-x-auto">
+          <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 items-center" style={{ minWidth: 380 }}>
+            {/* Left: YOUR WALLET RANK label + rank value (spans # + TRADER columns) */}
+            <div className="col-span-2 flex flex-col gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.04em] text-[--text-secondary]">Your wallet rank</span>
+              <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
+            </div>
 
-          {/* SCORE — aligned with SCORE column */}
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Score</span>
-            <span className="text-sm font-black" style={{ color: "#C9693A" }}>
-              {data?.userScore != null ? fmt(data.userScore) : "—"}
-            </span>
-          </div>
+            {/* SCORE */}
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Score</span>
+              <span className="text-sm font-black" style={{ color: "#C9693A" }}>
+                {data?.userScore != null ? fmt(data.userScore) : "—"}
+              </span>
+            </div>
 
-          {/* VOLUME — aligned with VOLUME column (hidden on mobile like table) */}
-          <div className="hidden sm:flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Volume</span>
-            <span className="text-sm font-semibold text-[--text-primary]">
-              {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
-            </span>
-          </div>
+            {/* VOLUME */}
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Volume</span>
+              <span className="text-sm font-semibold text-[--text-primary]">
+                {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
+              </span>
+            </div>
 
-          {/* SWAPS — aligned with SWAPS column (hidden on mobile like table) */}
-          <div className="hidden sm:flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Swaps</span>
-            <span className="text-sm font-semibold text-[--text-primary]">
-              {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
-            </span>
+            {/* SWAPS */}
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Swaps</span>
+              <span className="text-sm font-semibold text-[--text-primary]">
+                {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
+              </span>
+            </div>
           </div>
         </div>
       </div>
