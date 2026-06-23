@@ -64,17 +64,6 @@ The **You Pay** panel has the balance, amount input, token selector, and 25%/50%
 
 🔀 The route distribution on the right panel (e.g. PancakeSwap 48.4%, Uniswap 40.3%, Aerodrome 8.1%, SushiSwap 3.2%) shows that when a single pool's liquidity is insufficient, the transaction is automatically split across multiple pools (split routing). The ↻ icon manually recalculates the route.
 
-**Button states:**
-
-| Label | Condition |
-|---|---|
-| \`Enter amount\` | Amount field empty |
-| \`Insufficient balance\` | Not enough funds |
-| \`Approve [TOKEN]\` | First-time ERC-20 approval needed |
-| \`Swap\` | Ready to execute |
-
-> ⚠️ For ERC-20 tokens other than native ETH, a separate approve transaction (with its own gas fee) is required before Routis can move the token.
-
 ---
 
 ## Multi Swap
