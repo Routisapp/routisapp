@@ -419,6 +419,9 @@ export async function markSybilPaid(address: string): Promise<void> {
     );
   } catch { /* non-critical */ }
 }
+
+/** Check if address was referred and get referrer */
+export async function getReferrer(address: string): Promise<string | null> {
   const { data } = await supabase
     .from("referrals")
     .select("referrer")
