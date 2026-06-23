@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { toast }          from "sonner";
@@ -8,7 +8,7 @@ import { Header }         from "@/components/layout/Header";
 import { MobileNav }      from "@/components/layout/MobileNav";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useNFTTier }     from "@/hooks/useNFTTier";
-import { addMintScore }   from "@/lib/supabase";
+import { addMintScore, upsertUserScore, hasXFollowReward, markXFollowReward } from "@/lib/supabase";
 import { NFT_TIERS, TRADER_NFT_ADDRESS } from "@/constants/nft-tiers";
 import { basescanTx }     from "@/lib/utils";
 
@@ -90,6 +90,55 @@ export default function MintPage() {
   const [mintingTier, setMintingTier] = useState<number | null>(null);
   const [txHash,      setTxHash]      = useState<`0x${string}` | undefined>();
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
+
+  // X follow task state
+  const [xFollowState,   setXFollowState]   = useState<"idle" | "countdown" | "done">("idle");
+  const [xCountdown,     setXCountdown]     = useState(10);
+  const [xAlreadyClaimed, setXAlreadyClaimed] = useState(false);
+
+  // Check if already claimed on mount / address change
+  useEffect(() => {
+    if (!address) return;
+    hasXFollowReward(address).then((claimed) => {
+      if (claimed) { setXFollowState("done"); setXAlreadyClaimed(true); }
+    });
+  }, [address]);
+
+  async function handleXFollow() {
+    if (!address) { toast.error("Connect your wallet first"); return; }
+    if (xFollowState !== "idle") return;
+
+    // Open X profile in new tab
+    window.open("https://x.com/RoutisApp", "_blank");
+
+    // Start 10-second countdown
+    setXFollowState("countdown");
+    setXCountdown(10);
+    const interval = setInterval(() => {
+      setXCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // After 10s: award points
+    setTimeout(async () => {
+      try {
+        await upsertUserScore(address, { score_delta: 1000 });
+        await markXFollowReward(address);
+        setXFollowState("done");
+        setXAlreadyClaimed(true);
+        toast.success("+1000 points! Thanks for following Routis on X 🎉");
+        refetchMinted();
+      } catch {
+        toast.error("Failed to award points — try again");
+        setXFollowState("idle");
+      }
+    }, 10_000);
+  }
 
   const resolvedTiers = address
     ? mintedTiers
@@ -256,6 +305,43 @@ export default function MintPage() {
         {/* ── Görevler ── */}
         <p className="text-sm font-bold text-[--text-primary] mb-3">Tasks</p>
         <div className="space-y-3">
+
+          {/* X Follow Task */}
+          <div className="flex items-center gap-4 rounded-2xl border border-[--border] bg-[--bg-card] px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: "#C9693A18" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#C9693A">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[--text-primary]">Follow Routis on X</p>
+              <p className="text-xs text-[--text-secondary] mt-0.5">
+                {xFollowState === "countdown"
+                  ? `Verifying in ${xCountdown}s…`
+                  : xAlreadyClaimed
+                  ? "Reward claimed ✓"
+                  : "Follow @RoutisApp and earn points"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: "#C9693A15", color: "#C9693A" }}>
+                +1000
+              </span>
+              {!xAlreadyClaimed && (
+                <button
+                  onClick={handleXFollow}
+                  disabled={!address || xFollowState === "countdown"}
+                  className="rounded-xl px-3 py-1.5 text-xs font-bold text-white transition-all hover:brightness-110 disabled:opacity-40"
+                  style={{ background: xFollowState === "countdown" ? "#8b8fa8" : "#C9693A" }}
+                >
+                  {xFollowState === "countdown" ? `${xCountdown}s` : "Follow"}
+                </button>
+              )}
+              {xAlreadyClaimed && (
+                <span className="text-xs font-bold" style={{ color: "#22c55e" }}>✓</span>
+              )}
+            </div>
+          </div>
           <TaskRow
             icon={
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9693A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

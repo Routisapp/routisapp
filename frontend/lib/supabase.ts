@@ -60,7 +60,7 @@ function todayUTC3(): string {
 }
 
 // ─── Upsert user score ────────────────────────────────────────
-async function upsertUserScore(
+export async function upsertUserScore(
   address: string,
   delta: {
     score_delta?:      number;
@@ -397,7 +397,27 @@ export async function fetchWalletScoreLeaderboard(limit = 50) {
   return data ?? [];
 }
 
-/** Check if a sybil_payments table exists and this address has paid */
+/** Check if address already got the X follow reward */
+export async function hasXFollowReward(address: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("x_follow_rewards")
+      .select("address")
+      .eq("address", address.toLowerCase())
+      .single();
+    return !!data;
+  } catch { return false; }
+}
+
+/** Mark address as having received the X follow reward */
+export async function markXFollowReward(address: string): Promise<void> {
+  try {
+    await supabase.from("x_follow_rewards").upsert(
+      { address: address.toLowerCase(), rewarded_at: new Date().toISOString() },
+      { onConflict: "address" }
+    );
+  } catch { /* non-critical */ }
+}
 export async function hasSybilPaid(address: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
