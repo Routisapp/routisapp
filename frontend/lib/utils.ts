@@ -74,8 +74,8 @@ export function debounce<T extends (...args: unknown[]) => unknown>(fn: T, delay
  */
 export async function fetchTokenPrice(address: string): Promise<number> {
   try {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    const res  = await fetch(`${base}/api/token-price?address=${address}`, {
+    // Use relative URL so it always hits the correct host (works on both localhost and production)
+    const res  = await fetch(`/api/token-price?address=${address}`, {
       cache: "no-store",
     });
     if (!res.ok) return 0;
