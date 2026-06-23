@@ -8,7 +8,7 @@ import { Header }         from "@/components/layout/Header";
 import { MobileNav }      from "@/components/layout/MobileNav";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useNFTTier }     from "@/hooks/useNFTTier";
-import { addMintScore, upsertUserScore, hasXFollowReward, markXFollowReward } from "@/lib/supabase";
+import { addMintScore, getMintedTiers, upsertUserScore, hasXFollowReward, markXFollowReward } from "@/lib/supabase";
 import { NFT_TIERS } from "@/constants/nft-tiers";
 
 // Task row component
@@ -33,8 +33,20 @@ function TaskRow({ icon, title, desc, pts }: { icon: React.ReactNode; title: str
 
 export default function MintPage() {
   const { address } = useAccount();
-  const { score, mintedTiers, refetchMinted } = useNFTTier(address);
-  const [mintingTier, setMintingTier] = useState<number | null>(null);
+  const { score, refetchMinted } = useNFTTier(address);
+  const [mintingTier,   setMintingTier]   = useState<number | null>(null);
+  const [mintedSet,     setMintedSet]     = useState<Set<number>>(new Set());
+
+  // Load minted tiers from Supabase
+  const loadMinted = async (addr: string) => {
+    const set = await getMintedTiers(addr);
+    setMintedSet(set);
+  };
+
+  useEffect(() => {
+    if (address) loadMinted(address);
+    else setMintedSet(new Set());
+  }, [address]);
 
   // X follow task state
   const [xFollowState,    setXFollowState]    = useState<"idle" | "countdown" | "done">("idle");
@@ -67,7 +79,7 @@ export default function MintPage() {
         setXFollowState("done");
         setXAlreadyClaimed(true);
         toast.success("+1000 points! Thanks for following Routis on X 🎉");
-        refetchMinted();
+        if (address) await loadMinted(address);
       } catch {
         toast.error("Failed to award points — try again");
         setXFollowState("idle");
@@ -77,10 +89,12 @@ export default function MintPage() {
 
   async function handleMint(tierId: number) {
     if (!address) return;
+    if (mintedSet.has(tierId)) return; // already minted
     setMintingTier(tierId);
     try {
       toast.loading(`Claiming ${NFT_TIERS[tierId].name} badge...`, { id: "mint" });
-      await addMintScore(address);
+      await addMintScore(address, tierId);
+      await loadMinted(address);
       refetchMinted();
       toast.success(`${NFT_TIERS[tierId].name} badge claimed! +100 points`, { id: "mint" });
     } catch (err: unknown) {
@@ -91,9 +105,11 @@ export default function MintPage() {
     }
   }
 
-  const resolvedTiers = address
-    ? mintedTiers
-    : NFT_TIERS.map((t) => ({ ...t, minted: false, unlocked: false }));
+  const resolvedTiers = NFT_TIERS.map((t) => ({
+    ...t,
+    minted:   mintedSet.has(t.id),
+    unlocked: score >= t.requiredScore,
+  }));
 
   const nextTier  = NFT_TIERS.find(t => score < t.requiredScore) ?? null;
   const ptsToNext = nextTier ? nextTier.requiredScore - score : 0;

@@ -43,8 +43,26 @@ export async function insertSwapRecord(data: {
 }
 
 // ─── NFT mint score ───────────────────────────────────────────
-export async function addMintScore(address: string) {
+export async function addMintScore(address: string, tierId: number) {
   await upsertUserScore(address, { score_delta: 100 });
+  // Record the mint so the user can't mint again
+  try {
+    await supabase.from("mint_records").upsert(
+      { address: address.toLowerCase(), tier_id: tierId, minted_at: new Date().toISOString() },
+      { onConflict: "address,tier_id" }
+    );
+  } catch { /* non-critical */ }
+}
+
+/** Returns a set of tier IDs that this address has already minted */
+export async function getMintedTiers(address: string): Promise<Set<number>> {
+  try {
+    const { data } = await supabase
+      .from("mint_records")
+      .select("tier_id")
+      .eq("address", address.toLowerCase());
+    return new Set((data ?? []).map((r) => r.tier_id as number));
+  } catch { return new Set(); }
 }
 
 // ─── Streak helper (UTC+3) ────────────────────────────────────
