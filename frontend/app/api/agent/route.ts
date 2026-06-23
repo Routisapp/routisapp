@@ -19,11 +19,15 @@ Kurallar:
 
 Tokenlar: ETH WETH USDC USDT cbBTC DAI AERO BRETT TOSHI DEGEN VIRTUAL cbETH wstETH weETH rETH LINK USDe USDS MORPHO MOG EURC ZORA PENDLE YFI MOG
 
+SWAP_PREVIEW format — BU FORMAT'A KESINLIKLE UY:
 SWAP_PREVIEW_START
 {"fromToken":"SEMBOL","toToken":"SEMBOL","amountIn":"MIKTAR","amountOut":"MIKTAR","bestDex":"DEX","allRoutes":[{"dex":"Uniswap V3","amountOut":"X","fee":"0.05%"}],"fee":"0.05%","priceImpact":"0.05%","slippage":"0.5%"}
 SWAP_PREVIEW_END
 
-SWAP_PREVIEW_START ve SWAP_PREVIEW_END arasına SADECE tek satır JSON. Markdown code block kullanma.`;
+KURALLAR:
+- SWAP_PREVIEW_START ile başla, SWAP_PREVIEW_END ile bitir. END tag'ini ASLA atlama.
+- Araya SADECE tek satır JSON. Markdown code block kullanma.
+- JSON dışında hiçbir şey yazma START ile END arasına.`;
 
 const tools: Anthropic.Tool[] = [
   {
@@ -113,10 +117,18 @@ async function executeGetTokenPrice(symbol: string): Promise<object> {
 
 function parseSwapPreview(text: string): SwapPreview | undefined {
   try {
-    const start = text.indexOf("SWAP_PREVIEW_START");
-    const end   = text.indexOf("SWAP_PREVIEW_END");
-    if (start === -1 || end === -1) return undefined;
-    let json = text.slice(start + "SWAP_PREVIEW_START".length, end).trim();
+    const START_TAG = "SWAP_PREVIEW_START";
+    const END_TAG   = "SWAP_PREVIEW_END";
+    const start = text.indexOf(START_TAG);
+    if (start === -1) return undefined;
+    const afterStart = start + START_TAG.length;
+    let end = text.indexOf(END_TAG, afterStart);
+    // Fallback: if END tag missing, look for a second START or use end of string
+    if (end === -1) {
+      const secondStart = text.indexOf(START_TAG, afterStart);
+      end = secondStart !== -1 ? secondStart : text.length;
+    }
+    let json = text.slice(afterStart, end).trim();
     json = json.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     try { return JSON.parse(json) as SwapPreview; }
     catch {
@@ -128,11 +140,21 @@ function parseSwapPreview(text: string): SwapPreview | undefined {
 }
 
 function stripPreviewBlock(text: string): string {
-  const start = text.indexOf("SWAP_PREVIEW_START");
-  const end   = text.indexOf("SWAP_PREVIEW_END");
-  if (start === -1 || end === -1) return text;
+  const START_TAG = "SWAP_PREVIEW_START";
+  const END_TAG   = "SWAP_PREVIEW_END";
+  const start = text.indexOf(START_TAG);
+  if (start === -1) return text;
+  const afterStart = start + START_TAG.length;
+  let end = text.indexOf(END_TAG, afterStart);
+  let endOffset = END_TAG.length;
+  // Fallback: if END tag missing, look for a second START or use end of string
+  if (end === -1) {
+    const secondStart = text.indexOf(START_TAG, afterStart);
+    if (secondStart !== -1) { end = secondStart; endOffset = 0; }
+    else { end = text.length; endOffset = 0; }
+  }
   const before = text.slice(0, start).trim();
-  const after  = text.slice(end + "SWAP_PREVIEW_END".length).trim();
+  const after  = text.slice(end + endOffset).trim();
   return [before, after].filter(Boolean).join("\n\n").trim();
 }
 
