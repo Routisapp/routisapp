@@ -213,14 +213,17 @@ export function AgentChat() {
       style={{ height: "calc(100dvh - 56px - 64px)", background: "var(--bg-primary)" }}
     >
 
-      {/* Messages — scrollable */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      {/* Title — sticky header */}
+      <div className="shrink-0 px-4 pt-6 pb-4 bg-[--bg-primary]">
         <div className="mx-auto max-w-2xl">
-          {/* Title — always visible */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-[#C9693A]">Routis AI Agent</h1>
-            <p className="mt-1 text-sm text-[--text-secondary]">I'll find the best swap route for you.</p>
-          </div>
+          <h1 className="text-2xl font-bold text-[#C9693A]">Routis AI Agent</h1>
+          <p className="mt-1 text-sm text-[--text-secondary]">I'll find the best swap route for you.</p>
+        </div>
+      </div>
+
+      {/* Messages — scrollable */}
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
+        <div className="mx-auto max-w-2xl">
 
           {/* Empty state */}
           {messages.length === 0 && !loading && (
@@ -235,11 +238,6 @@ export function AgentChat() {
                     <path d="M12 7V4"/><circle cx="12" cy="3" r="1"/>
                   </svg>
                 </div>
-
-                {/* Subtitle */}
-                <p className="text-base text-[--text-secondary] w-full text-center" style={{ marginTop: 10 }}>
-                  I'll find the best swap route for you.
-                </p>
 
                 {/* Example buttons */}
                 <div className="inline-flex flex-wrap gap-3 justify-center">
