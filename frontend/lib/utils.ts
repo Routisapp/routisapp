@@ -1,10 +1,10 @@
 import { formatUnits } from "viem";
 
-/** 1234567.89 → "1.23M", 12345 → "12.3K", 123 → "123" */
-export function formatNumber(n: number, decimals = 2): string {
+/** 1234567.89 → "1.2M", 12345 → "12.3K", 450 → "450" */
+export function formatNumber(n: number, decimals = 1): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(decimals) + "M";
   if (n >= 1_000)     return (n / 1_000).toFixed(decimals)     + "K";
-  return n.toFixed(decimals);
+  return Number.isInteger(n) ? String(n) : n.toFixed(decimals);
 }
 
 /** BigInt token amount → human-readable string */
