@@ -397,8 +397,28 @@ export async function fetchWalletScoreLeaderboard(limit = 50) {
   return data ?? [];
 }
 
-/** Check if address was referred and get referrer */
-export async function getReferrer(address: string): Promise<string | null> {
+/** Check if a sybil_payments table exists and this address has paid */
+export async function hasSybilPaid(address: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from("sybil_payments")
+      .select("address")
+      .eq("address", address.toLowerCase())
+      .single();
+    if (error) return false;
+    return !!data;
+  } catch { return false; }
+}
+
+/** Mark an address as having paid for sybil reveal */
+export async function markSybilPaid(address: string): Promise<void> {
+  try {
+    await supabase.from("sybil_payments").upsert(
+      { address: address.toLowerCase(), paid_at: new Date().toISOString() },
+      { onConflict: "address" }
+    );
+  } catch { /* non-critical */ }
+}
   const { data } = await supabase
     .from("referrals")
     .select("referrer")

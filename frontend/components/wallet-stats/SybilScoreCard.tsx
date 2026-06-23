@@ -5,9 +5,9 @@ import { useSendTransaction, usePublicClient, useAccount } from "wagmi";
 import { parseEther } from "viem";
 import { toast } from "sonner";
 import type { SybilResult } from "@/lib/sybilScore";
+import { hasSybilPaid, markSybilPaid } from "@/lib/supabase";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-// SECURITY: read recipient from env instead of hardcoding in client bundle
 const PAYMENT_RECIPIENT = (
   process.env.NEXT_PUBLIC_ROUTIS_TREASURY ?? "0xd6A895d67eAc925Faa0C9789Cb1A5CE248Bc52d0"
 ) as `0x${string}`;
@@ -15,19 +15,17 @@ const PAYMENT_AMOUNT    = parseEther("0.0007");
 const PAYMENT_ETH_LABEL = "0.0007 ETH";
 const LS_KEY            = "sybil_paid_wallets";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── LocalStorage helpers (fast, client-only) ──────────────────────────────────
 
 function getPaidWallets(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
     const raw = localStorage.getItem(LS_KEY);
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-  } catch {
-    return new Set();
-  }
+  } catch { return new Set(); }
 }
 
-function markWalletPaid(address: string) {
+function markLocalPaid(address: string) {
   if (typeof window === "undefined") return;
   try {
     const set = getPaidWallets();
@@ -36,7 +34,7 @@ function markWalletPaid(address: string) {
   } catch { /* ignore */ }
 }
 
-function hasPaid(address: string | undefined): boolean {
+function hasLocalPaid(address: string | undefined): boolean {
   if (!address) return false;
   return getPaidWallets().has(address.toLowerCase());
 }
@@ -63,31 +61,41 @@ export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
   const { sendTransactionAsync } = useSendTransaction();
   const publicClient = usePublicClient();
 
-  // Check if either the connected wallet OR the analyzed address has already paid
-  function checkPaid(): boolean {
-    return hasPaid(address) || hasPaid(analyzed);
+  // Fast local check first
+  function checkLocalPaid(): boolean {
+    return hasLocalPaid(address) || hasLocalPaid(analyzed);
   }
 
   const [payState, setPayState] = useState<PayState>(() =>
-    checkPaid() ? "revealed" : "locked"
+    checkLocalPaid() ? "revealed" : "locked"
   );
 
-  // Re-check on every address/analyzed change (handles hydration delay & wallet switch)
+  // On mount and address change: check Supabase for persistent payment record
   useEffect(() => {
     if (payState === "paying") return;
-    setPayState(checkPaid() ? "revealed" : "locked");
+
+    // Fast path: localStorage hit
+    if (checkLocalPaid()) {
+      setPayState("revealed");
+      return;
+    }
+
+    // Slow path: Supabase check (covers new device / cleared localStorage)
+    const addrs = [address, analyzed].filter(Boolean) as string[];
+    if (addrs.length === 0) return;
+
+    Promise.any(addrs.map((a) => hasSybilPaid(a).then((paid) => { if (!paid) throw new Error(); return a; })))
+      .then((paidAddr) => {
+        markLocalPaid(paidAddr); // cache locally so next load is instant
+        setPayState("revealed");
+      })
+      .catch(() => setPayState("locked"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, analyzed]);
 
   async function handlePay() {
-    if (!address) {
-      toast.error("Connect your wallet first");
-      return;
-    }
-    if (!publicClient) {
-      toast.error("Wallet client not ready — try again");
-      return;
-    }
+    if (!address) { toast.error("Connect your wallet first"); return; }
+    if (!publicClient) { toast.error("Wallet client not ready — try again"); return; }
 
     try {
       setPayState("paying");
@@ -102,11 +110,12 @@ export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
       await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
 
       toast.success("Payment confirmed — revealing Sybil Score!", { id: "sybil-pay" });
-      // Save both the connected wallet and the analyzed address so neither pays again
-      if (address) markWalletPaid(address);
-      if (analyzed) markWalletPaid(analyzed);
-      setPayState("revealed");
 
+      // Save to both localStorage (fast) and Supabase (persistent across devices)
+      if (address)  { markLocalPaid(address);  await markSybilPaid(address); }
+      if (analyzed) { markLocalPaid(analyzed); await markSybilPaid(analyzed); }
+
+      setPayState("revealed");
     } catch (err: unknown) {
       const msg = (err instanceof Error ? err.message : "").toLowerCase();
       toast.error(
