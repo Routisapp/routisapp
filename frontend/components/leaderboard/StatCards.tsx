@@ -120,16 +120,16 @@ export function AggregateCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
       {cards.map((c) => (
         <div
           key={c.label}
-          className="rounded-xl border border-[--border] bg-[--bg-card] p-4 flex flex-col gap-1 min-h-[90px] justify-center"
+          className="rounded-xl border border-[--border] bg-[--bg-card] px-3 py-3 sm:p-4 flex flex-col gap-1 min-h-[80px] justify-center"
         >
-          <p className="text-[11px] font-bold uppercase tracking-[0.04em] text-[--text-secondary]" style={{ marginBottom: 2 }}>
+          <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.04em] text-[--text-secondary]" style={{ marginBottom: 2 }}>
             {c.label}
           </p>
-          <p className="text-[22px] font-semibold text-[--text-primary]" style={{ lineHeight: 1.15 }}>
+          <p className="text-base sm:text-[22px] font-semibold text-[--text-primary]" style={{ lineHeight: 1.15 }}>
             {c.value}
           </p>
         </div>
