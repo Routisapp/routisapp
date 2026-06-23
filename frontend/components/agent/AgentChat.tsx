@@ -282,10 +282,10 @@ export function AgentChat() {
 
       {/* Fixed input bar */}
       <div
-        className="shrink-0 px-4 pb-4 pt-3 border-t border-[--border] bg-[--bg-primary]"
+        className="shrink-0 px-4 pb-2 pt-2 border-t border-[--border] bg-[--bg-primary]"
       >
         <div className="mx-auto max-w-2xl">
-          <div className="flex items-center gap-2 rounded-2xl px-4 py-3 bg-[--bg-card] border border-[--border]">
+          <div className="flex items-center gap-2 rounded-2xl px-4 py-2 bg-[--bg-card] border border-[--border]">
             <textarea
               rows={1}
               value={input}
@@ -299,7 +299,7 @@ export function AgentChat() {
             <button
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || loading}
-              className="shrink-0 flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-40"
+              className="shrink-0 flex items-center gap-2 rounded-xl px-4 py-1.5 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-40"
               style={{ background: "#C9693A" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -309,7 +309,7 @@ export function AgentChat() {
             </button>
           </div>
 
-          <p className="mt-2 text-center text-xs text-[--text-secondary]" style={{ opacity: 0.6 }}>
+          <p className="mt-1 text-center text-xs text-[--text-secondary]" style={{ opacity: 0.6 }}>
             ⓘ A fee of 0.2 USDC will be charged for each approved transaction.
           </p>
         </div>
