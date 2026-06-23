@@ -8,7 +8,7 @@ import { hasSybilPaid, markSybilPaid } from "@/lib/supabase";
 import { x402Fetch } from "@/lib/x402Client";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PAYMENT_ETH_LABEL = "0.70 USDC";
+const PAYMENT_ETH_LABEL = "1 USDC via x402";
 const LS_KEY            = "sybil_paid_wallets";
 
 // ── LocalStorage helpers (fast, client-only) ──────────────────────────────────

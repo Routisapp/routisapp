@@ -47,12 +47,12 @@ export const POST = withX402(
   {
     accepts: {
       scheme:            "exact",
-      price:             "$0.70",
+      price:             "$1.00",
       network,
       payTo:             TREASURY,
       maxTimeoutSeconds: 300,
     },
-    description: "Routis Sybil Score — reveal fee (0.70 USDC)",
+    description: "Routis Sybil Score — reveal fee (1 USDC)",
     mimeType:    "application/json",
   },
   server,
