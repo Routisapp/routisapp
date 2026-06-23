@@ -337,9 +337,7 @@ export default function MintPage() {
                   {xFollowState === "countdown" ? `${xCountdown}s` : "Follow"}
                 </button>
               )}
-              {xAlreadyClaimed && (
-                <span className="text-xs font-bold" style={{ color: "#22c55e" }}>✓</span>
-              )}
+              {xAlreadyClaimed && null}
             </div>
           </div>
           <TaskRow
