@@ -98,6 +98,9 @@ export function WalletScoreLeaderboard({
 
   return (
     <div className="rounded-2xl border border-[--border] bg-[--bg-card] overflow-hidden">
+      {/* Scrollable table wrapper for mobile */}
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 480 }}>
       {/* Column headers */}
       <div className="grid grid-cols-[32px_1fr_64px_56px_88px_64px] gap-2 px-5 py-2.5 border-b border-[--border]">
         {["#", "ADDRESS", "SCORE", "TXS", "VOLUME", "AGE"].map((h) => (
@@ -158,6 +161,8 @@ export function WalletScoreLeaderboard({
           );
         })
       )}
+        </div>
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
