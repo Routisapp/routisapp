@@ -26,10 +26,10 @@ export function MessageBubble({
   if (!isUser && message.swapPreview && !cancelled) {
     return (
       <div className="mb-4">
-        <div style={{ maxWidth: "50%" }}>
+        <div className="w-[70%] sm:w-auto sm:max-w-[50%]">
           <SwapSummaryCard preview={message.swapPreview} />
         </div>
-        <div style={{ maxWidth: "75%" }}>
+        <div className="w-full sm:max-w-[75%]">
           <SwapPreviewCard
             preview={message.swapPreview}
             isPending={pendingSwapId === message.id}
