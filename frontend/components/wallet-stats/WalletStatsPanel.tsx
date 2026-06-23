@@ -165,16 +165,6 @@ export function WalletStatsPanel() {
       )}
 
       {/* ── Wallet Score Leaderboard — always visible ──────────── */}
-      {/* Search */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          type="text"
-          placeholder="Search by address..."
-          value={lbSearch}
-          onChange={(e) => { setLbSearch(e.target.value); }}
-          className="flex-1 rounded-xl bg-[--bg-input] border border-[--border] px-3 py-2 text-sm text-[--text-primary] outline-none placeholder:text-[--text-secondary] focus:border-[#C9693A]/60 transition-colors"
-        />
-      </div>
       <WalletScoreLeaderboard currentAddress={analyzed} refreshKey={refreshKey} search={lbSearch} tierFilter={lbTier} />
     </div>
   );
