@@ -167,7 +167,7 @@ export default function MintPage() {
           </div>
 
           {/* Progress stepper — mint butonlarıyla aynı grid genişliği */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 mb-4">
+          <div className="grid grid-cols-4 mb-4">
             {NFT_TIERS.map((tier, i) => {
               const isActive = score >= tier.requiredScore;
               const isLast   = i === NFT_TIERS.length - 1;
@@ -182,9 +182,10 @@ export default function MintPage() {
                     />
                     {/* Icon */}
                     <div
-                      className="flex items-center justify-center rounded-2xl transition-all text-2xl shrink-0"
+                      className="flex items-center justify-center rounded-xl transition-all shrink-0"
                       style={{
-                        width: 44, height: 44,
+                        width: 36, height: 36,
+                        fontSize: 18,
                         background: isActive ? (tier.name === "Bronze" ? "#CD7F32" : tier.name === "Silver" ? "#A0A0A0" : tier.name === "Gold" ? "#D4A017" : "#7B5EA7") : "var(--bg-input)",
                         border: `2px solid ${isActive ? "#C9693A" : "var(--border)"}`,
                         opacity: isActive ? 1 : 0.45,
@@ -198,10 +199,10 @@ export default function MintPage() {
                     />
                   </div>
                   {/* Label below */}
-                  <span className="text-xs font-bold mt-1.5" style={{ color: isActive ? "#C9693A" : "var(--text-secondary)" }}>
+                  <span className="text-[10px] sm:text-xs font-bold mt-1.5" style={{ color: isActive ? "#C9693A" : "var(--text-secondary)" }}>
                     {tier.name}
                   </span>
-                  <span className="text-[10px]" style={{ color: isActive ? "#C9693A" : "var(--text-secondary)" }}>
+                  <span className="text-[9px] sm:text-[10px]" style={{ color: isActive ? "#C9693A" : "var(--text-secondary)" }}>
                     {tier.requiredScore.toLocaleString("en-US")} pts
                   </span>
                 </div>
@@ -211,7 +212,7 @@ export default function MintPage() {
 
           {/* Mint buttons */}
           {address && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-1 sm:gap-2">
               {resolvedTiers.map((tier) => {
                 const isMinting = mintingTier === tier.id && isConfirming;
                 if (tier.minted) {
