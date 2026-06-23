@@ -253,15 +253,6 @@ export function AgentChat() {
                     </button>
                   ))}
                 </div>
-
-                {!address && (
-                  <div className="mt-2">
-                    <p className="text-xs mb-3 text-[--text-secondary]">
-                      Connect your wallet to execute swaps
-                    </p>
-                    <ConnectButton />
-                  </div>
-                )}
               </div>
             </div>
           )}
