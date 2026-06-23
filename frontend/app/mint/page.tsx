@@ -210,7 +210,7 @@ export default function MintPage() {
           </div>
 
           {/* Mint buttons */}
-          {address ? (
+          {address && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {resolvedTiers.map((tier) => {
                 const isMinting = mintingTier === tier.id && isConfirming;
@@ -249,8 +249,6 @@ export default function MintPage() {
                 );
               })}
             </div>
-          ) : (
-            <ConnectButton />
           )}
         </div>
 
