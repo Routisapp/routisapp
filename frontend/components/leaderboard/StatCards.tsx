@@ -66,29 +66,32 @@ export function StatCards() {
       {/* ── Wallet rank card — horizontally scrollable on mobile ── */}
       <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
         <div className="overflow-x-auto">
-          {/* Header row — labels */}
-          <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-2 border-b border-[--border]" style={{ minWidth: 380 }}>
-            <div className="col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Your wallet rank</span>
+          <div style={{ minWidth: 380 }}>
+            {/* Single row: label + values on same line */}
+            <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 border-b border-[--border]">
+              {/* YOUR WALLET RANK — header */}
+              <div className="col-span-2 flex items-center py-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Your wallet rank</span>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right flex items-center justify-end py-2">Score</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right flex items-center justify-end py-2">Volume</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right flex items-center justify-end py-2">Swaps</span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Score</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Volume</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Swaps</span>
-          </div>
-          {/* Values row */}
-          <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 items-center" style={{ minWidth: 380 }}>
-            <div className="col-span-2">
-              <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
+            {/* Values row */}
+            <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 items-center">
+              <div className="col-span-2">
+                <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
+              </div>
+              <span className="text-sm font-black text-right" style={{ color: "#C9693A" }}>
+                {data?.userScore != null ? fmt(data.userScore) : "—"}
+              </span>
+              <span className="text-sm font-semibold text-right text-[--text-primary]">
+                {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
+              </span>
+              <span className="text-sm font-semibold text-right text-[--text-primary]">
+                {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
+              </span>
             </div>
-            <span className="text-sm font-black text-right" style={{ color: "#C9693A" }}>
-              {data?.userScore != null ? fmt(data.userScore) : "—"}
-            </span>
-            <span className="text-sm font-semibold text-right text-[--text-primary]">
-              {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
-            </span>
-            <span className="text-sm font-semibold text-right text-[--text-primary]">
-              {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
-            </span>
           </div>
         </div>
       </div>
