@@ -66,36 +66,29 @@ export function StatCards() {
       {/* ── Wallet rank card — horizontally scrollable on mobile ── */}
       <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
         <div className="overflow-x-auto">
+          {/* Header row — labels */}
+          <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-2 border-b border-[--border]" style={{ minWidth: 380 }}>
+            <div className="col-span-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Your wallet rank</span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Score</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Volume</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary] text-right">Swaps</span>
+          </div>
+          {/* Values row */}
           <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 py-3 items-center" style={{ minWidth: 380 }}>
-            {/* Left: YOUR WALLET RANK label + rank value (spans # + TRADER columns) */}
-            <div className="col-span-2 flex flex-col gap-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.04em] text-[--text-secondary]">Your wallet rank</span>
+            <div className="col-span-2">
               <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
             </div>
-
-            {/* SCORE */}
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Score</span>
-              <span className="text-sm font-black" style={{ color: "#C9693A" }}>
-                {data?.userScore != null ? fmt(data.userScore) : "—"}
-              </span>
-            </div>
-
-            {/* VOLUME */}
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Volume</span>
-              <span className="text-sm font-semibold text-[--text-primary]">
-                {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
-              </span>
-            </div>
-
-            {/* SWAPS */}
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Swaps</span>
-              <span className="text-sm font-semibold text-[--text-primary]">
-                {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
-              </span>
-            </div>
+            <span className="text-sm font-black text-right" style={{ color: "#C9693A" }}>
+              {data?.userScore != null ? fmt(data.userScore) : "—"}
+            </span>
+            <span className="text-sm font-semibold text-right text-[--text-primary]">
+              {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
+            </span>
+            <span className="text-sm font-semibold text-right text-[--text-primary]">
+              {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
+            </span>
           </div>
         </div>
       </div>
