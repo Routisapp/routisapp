@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { toast }          from "sonner";
 import { Header }         from "@/components/layout/Header";
@@ -9,18 +9,9 @@ import { MobileNav }      from "@/components/layout/MobileNav";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useNFTTier }     from "@/hooks/useNFTTier";
 import { addMintScore, upsertUserScore, hasXFollowReward, markXFollowReward } from "@/lib/supabase";
-import { NFT_TIERS, TRADER_NFT_ADDRESS } from "@/constants/nft-tiers";
-import { basescanTx }     from "@/lib/utils";
+import { NFT_TIERS } from "@/constants/nft-tiers";
 
-const NFT_ABI = [
-  {
-    name: "mint",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "tierId", type: "uint256" }],
-    outputs: [],
-  },
-] as const;
+const NFT_ABI = [] as const; // kept for type compatibility
 
 // Tier icon SVGs
 function TierIcon({ name, active }: { name: string; active: boolean }) {
@@ -85,12 +76,8 @@ function TaskRow({ icon, title, desc, pts }: { icon: React.ReactNode; title: str
 
 export default function MintPage() {
   const { address }        = useAccount();
-  const publicClient       = usePublicClient();
   const { score, mintedTiers, refetchMinted } = useNFTTier(address);
-  const { writeContractAsync } = useWriteContract();
   const [mintingTier, setMintingTier] = useState<number | null>(null);
-  const [txHash,      setTxHash]      = useState<`0x${string}` | undefined>();
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
 
   // X follow task state
   const [xFollowState,   setXFollowState]   = useState<"idle" | "countdown" | "done">("idle");
@@ -154,52 +141,16 @@ export default function MintPage() {
   const lineWidth = Math.min((score / maxScore) * 100, 100);
 
   async function handleMint(tierId: number) {
-    if (!address || !TRADER_NFT_ADDRESS) return;
+    if (!address) return;
     setMintingTier(tierId);
     try {
-      // Sync on-chain score before mint and wait for it
-      toast.loading("Syncing score on-chain...", { id: "mint" });
-      try {
-        await fetch(`/api/sync-before-mint`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userAddress: address, score }),
-        });
-        // Give the chain a moment to process the sync tx
-        await new Promise((r) => setTimeout(r, 4000));
-      } catch { /* non-blocking — proceed anyway */ }
-
-      toast.loading(`Minting ${NFT_TIERS[tierId].name} NFT...`, { id: "mint" });
-
-      const hash = await writeContractAsync({
-        address:      TRADER_NFT_ADDRESS,
-        abi:          NFT_ABI,
-        functionName: "mint",
-        args:         [BigInt(tierId)],
-      });
-      setTxHash(hash);
-
-      // Wait for on-chain confirmation BEFORE awarding points
-      // This prevents the 100-point exploit (reject tx but still get points)
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
-      } else {
-        await new Promise((r) => setTimeout(r, 5000));
-      }
-
-      // Only award points after confirmed on-chain
-      await addMintScore(address).catch(console.error);
+      toast.loading(`Claiming ${NFT_TIERS[tierId].name} badge...`, { id: "mint" });
+      await addMintScore(address);
       refetchMinted();
-      toast.success("NFT minted! +100 points", {
-        id:     "mint",
-        action: { label: "View", onClick: () => window.open(basescanTx(hash)) },
-      });
+      toast.success(`${NFT_TIERS[tierId].name} badge claimed! +100 points`, { id: "mint" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      toast.error(
-        msg.toLowerCase().includes("user rejected") ? "Transaction rejected" : `Mint failed: ${msg}`,
-        { id: "mint" },
-      );
+      toast.error(`Failed: ${msg}`, { id: "mint" });
     } finally {
       setMintingTier(null);
     }
@@ -279,7 +230,7 @@ export default function MintPage() {
           {address && (
             <div className="grid grid-cols-4 gap-1 sm:gap-2">
               {resolvedTiers.map((tier) => {
-                const isMinting = mintingTier === tier.id && isConfirming;
+                const isMinting = mintingTier === tier.id;
                 if (tier.minted) {
                   return (
                     <div
