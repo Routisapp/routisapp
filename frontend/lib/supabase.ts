@@ -146,7 +146,10 @@ export async function upsertUserScore(
 async function syncScoreOnChain(address: string, newScore: number): Promise<void> {
   try {
     const secret = process.env.INTERNAL_API_SECRET ?? "";
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    // Server-side: VERCEL_URL is auto-set; client-side: use relative path
+    const baseUrl = typeof window === "undefined"
+      ? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"))
+      : "";
 
     await fetch(`${baseUrl}/api/update-score`, {
       method:  "POST",

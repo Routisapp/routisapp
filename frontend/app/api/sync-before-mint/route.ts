@@ -18,7 +18,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing userAddress or score" }, { status: 400 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    // Server-side: use VERCEL_URL (auto-set by Vercel) or fallback to localhost
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000");
     const secret  = process.env.INTERNAL_API_SECRET ?? "";
 
     const res = await fetch(`${baseUrl}/api/update-score`, {
