@@ -187,7 +187,17 @@ export default function ProfilePage() {
             <p className="mb-4 text-[--text-secondary]">
               Connect your wallet to view your profile.
             </p>
-            <ConnectButton />
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <button
+                  onClick={openConnectModal}
+                  className="rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all hover:brightness-110"
+                  style={{ background: "#C9693A" }}
+                >
+                  Connect Wallet
+                </button>
+              )}
+            </ConnectButton.Custom>
           </div>
         </main>
         <MobileNav />
