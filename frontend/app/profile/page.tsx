@@ -256,13 +256,12 @@ export default function ProfilePage() {
           </div>
 
           {/* Address + Tier badge inline */}
-          <div className="flex items-center justify-center gap-2 mb-0">
+          <div className="flex items-center justify-center gap-2 mb-0 flex-wrap">
             <span
-              className="font-mono text-sm font-medium truncate"
-              style={{ color: "var(--text-primary)", maxWidth: 180 }}
-              title={address}
+              className="font-mono"
+              style={{ fontSize: 11, fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.01em", wordBreak: "keep-all", whiteSpace: "nowrap" }}
             >
-              {address ? `${address.slice(0, 6)}...${address.slice(-6)}` : ""}
+              {address}
             </span>
             <div
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold shrink-0"
