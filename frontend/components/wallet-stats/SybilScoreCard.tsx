@@ -1,18 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSendTransaction, usePublicClient, useAccount } from "wagmi";
-import { parseEther } from "viem";
+import { useWalletClient, usePublicClient, useAccount } from "wagmi";
 import { toast } from "sonner";
 import type { SybilResult } from "@/lib/sybilScore";
 import { hasSybilPaid, markSybilPaid } from "@/lib/supabase";
+import { x402Fetch } from "@/lib/x402Client";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PAYMENT_RECIPIENT = (
-  process.env.NEXT_PUBLIC_ROUTIS_TREASURY ?? "0xd6A895d67eAc925Faa0C9789Cb1A5CE248Bc52d0"
-) as `0x${string}`;
-const PAYMENT_AMOUNT    = parseEther("0.0007");
-const PAYMENT_ETH_LABEL = "0.0007 ETH";
+const PAYMENT_ETH_LABEL = "0.70 USDC";
 const LS_KEY            = "sybil_paid_wallets";
 
 // ── LocalStorage helpers (fast, client-only) ──────────────────────────────────
@@ -58,7 +54,7 @@ interface Props {
 
 export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
   const { address } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
+  const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
 
   // Fast local check first
@@ -95,23 +91,34 @@ export function SybilScoreCard({ result, isLoading, analyzed }: Props) {
 
   async function handlePay() {
     if (!address) { toast.error("Connect your wallet first"); return; }
-    if (!publicClient) { toast.error("Wallet client not ready — try again"); return; }
+    if (!walletClient || !publicClient) { toast.error("Wallet not ready — try again"); return; }
 
     try {
       setPayState("paying");
-      toast.loading("Sending payment…", { id: "sybil-pay" });
+      toast.loading("Processing payment…", { id: "sybil-pay" });
 
-      const hash = await sendTransactionAsync({
-        to:    PAYMENT_RECIPIENT,
-        value: PAYMENT_AMOUNT,
-      });
+      // x402 USDC payment via /api/sybil-fee
+      const feeRes = await x402Fetch(
+        "/api/sybil-fee",
+        {
+          method:  "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body:    "{}",
+        },
+        walletClient,
+        publicClient,
+      );
 
-      toast.loading("Confirming transaction…", { id: "sybil-pay" });
-      await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+      if (!feeRes.ok) {
+        const rawText = await feeRes.text().catch(() => "");
+        let errMsg = "Payment failed";
+        try { errMsg = JSON.parse(rawText)?.error ?? rawText ?? errMsg; } catch { errMsg = rawText || errMsg; }
+        throw new Error(errMsg);
+      }
 
       toast.success("Payment confirmed — revealing Sybil Score!", { id: "sybil-pay" });
 
-      // Save to both localStorage (fast) and Supabase (persistent across devices)
+      // Save to both localStorage and Supabase
       if (address)  { markLocalPaid(address);  await markSybilPaid(address); }
       if (analyzed) { markLocalPaid(analyzed); await markSybilPaid(analyzed); }
 

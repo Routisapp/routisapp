@@ -1,6 +1,6 @@
 /**
- * /api/agent-fee — x402 korumalı fee endpoint
- * 0.1 USDC Base mainnet, CDP Facilitator via @x402/next
+ * /api/sybil-fee — x402 korumalı sybil score reveal endpoint
+ * 0.0007 ETH yerine USDC ile ödeme — agent-fee ile aynı altyapı
  */
 import { NextRequest, NextResponse } from "next/server";
 import { withX402, x402ResourceServer } from "@x402/next";
@@ -17,14 +17,11 @@ const TREASURY = (
   "0xd6A895d67eAc925Faa0C9789Cb1A5CE248Bc52d0"
 ) as `0x${string}`;
 
-// SEC1 PEM → PKCS#8 PEM (CDP portal SEC1 indiriyor, generateJwt PKCS#8 bekliyor)
 function sec1ToPkcs8(pem: string): string {
   try {
     const key = createPrivateKey({ key: pem, format: "pem" });
     return key.export({ type: "pkcs8", format: "pem" }) as string;
-  } catch {
-    return pem;
-  }
+  } catch { return pem; }
 }
 
 const cdpKeyId  = process.env.CDP_API_KEY_ID ?? "";
@@ -42,20 +39,20 @@ const network = cdpKeyValid ? "eip155:8453" : "eip155:84532";
 const facilitatorClient = new HTTPFacilitatorClient(facilitatorConfig);
 const server = new x402ResourceServer(facilitatorClient).register(network, new ExactEvmScheme());
 
-const agentFeeHandler = async (_req: NextRequest): Promise<NextResponse> =>
+const sybilFeeHandler = async (_req: NextRequest): Promise<NextResponse> =>
   NextResponse.json({ ok: true });
 
 export const POST = withX402(
-  agentFeeHandler,
+  sybilFeeHandler,
   {
     accepts: {
       scheme:            "exact",
-      price:             "$0.30",
+      price:             "$0.70",
       network,
       payTo:             TREASURY,
       maxTimeoutSeconds: 300,
     },
-    description: "Routis AI Agent — swap route fee (0.3 USDC)",
+    description: "Routis Sybil Score — reveal fee (0.70 USDC)",
     mimeType:    "application/json",
   },
   server,

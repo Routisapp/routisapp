@@ -13,7 +13,7 @@ import { MessageBubble } from "./MessageBubble";
 import { x402Fetch } from "@/lib/x402Client";
 
 const USDC_ADDRESS           = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
-const PLATFORM_FEE_AMOUNT    = 200_000n; // 0.2 USDC (6 decimals) — x402 fee kontrolü için
+const PLATFORM_FEE_AMOUNT    = 300_000n; // 0.3 USDC (6 decimals) — x402 fee kontrolü için
 const EXAMPLE_PROMPTS = [
   "Swap 5 USDC to ETH",
   "Swap 0.005 ETH to USDC",
@@ -128,7 +128,7 @@ export function AgentChat() {
 
         if (usdcBalance < PLATFORM_FEE_AMOUNT) {
           throw new Error(
-            `Insufficient USDC balance for fee. Need 0.1 USDC, have ${(Number(usdcBalance) / 1e6).toFixed(2)} USDC.`
+            `Insufficient USDC balance for fee. Need 0.3 USDC, have ${(Number(usdcBalance) / 1e6).toFixed(2)} USDC.`
           );
         }
       }
@@ -310,7 +310,7 @@ export function AgentChat() {
           </div>
 
           <p className="mt-1 text-center text-xs text-[--text-secondary]" style={{ opacity: 0.6 }}>
-            ⓘ A fee of 0.2 USDC will be charged for each approved transaction.
+            ⓘ A fee of 0.3 USDC will be charged for each approved transaction.
           </p>
         </div>
       </div>
