@@ -81,24 +81,24 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[--border] bg-[--bg-primary]/95 backdrop-blur-sm">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center" }}>
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
 
         {/* Logo */}
-        <Link href="/swap" className="flex items-center gap-2 no-underline">
+        <Link href="/swap" className="flex items-center gap-2 no-underline shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
             alt="Routis logo"
-            width={40}
-            height={40}
+            width={36}
+            height={36}
             style={{ objectFit: "contain" }}
             className="dark:brightness-90"
           />
           <span className="text-lg font-black tracking-tight text-[--text-primary]">Routis</span>
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex justify-self-center">
+        {/* Desktop nav — hidden on mobile */}
+        <nav className="hidden items-center gap-1 md:flex">
           {NAV.map(({ href, label, Icon }) => {
             const active = pathname === href;
             return (
@@ -107,9 +107,7 @@ export function Header() {
                 href={href}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all ${
                   active
-                    ? href === "/agent"
-                      ? "border border-[#C9693A]/30 bg-[#C9693A]/10 text-[#C9693A]"
-                      : "border border-[#C9693A]/30 bg-[#C9693A]/10 text-[#C9693A]"
+                    ? "border border-[#C9693A]/30 bg-[#C9693A]/10 text-[#C9693A]"
                     : "border border-transparent text-[--text-secondary] hover:text-[--text-primary]"
                 }`}
               >
@@ -121,7 +119,7 @@ export function Header() {
         </nav>
 
         {/* Right side: theme toggle + wallet */}
-        <div className="flex items-center gap-2 justify-self-end">
+        <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
 
           <ConnectButton.Custom>
@@ -129,13 +127,29 @@ export function Header() {
               if (!mounted) return null;
               if (!account || !chain) {
                 return (
-                  <button
-                    onClick={openConnectModal}
-                    className="rounded-xl px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110"
-                    style={{ background: "#C9693A" }}
-                  >
-                    Connect Wallet
-                  </button>
+                  <>
+                    {/* Mobile: icon only */}
+                    <button
+                      onClick={openConnectModal}
+                      className="flex md:hidden h-8 w-8 items-center justify-center rounded-xl text-white transition-all hover:brightness-110"
+                      style={{ background: "#C9693A" }}
+                      aria-label="Connect Wallet"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/>
+                        <path d="M16 11v2"/>
+                        <path d="M2 11h20"/>
+                      </svg>
+                    </button>
+                    {/* Desktop: full text */}
+                    <button
+                      onClick={openConnectModal}
+                      className="hidden md:flex rounded-xl px-4 py-2 text-sm font-bold text-white transition-all hover:brightness-110"
+                      style={{ background: "#C9693A" }}
+                    >
+                      Connect Wallet
+                    </button>
+                  </>
                 );
               }
               return (
