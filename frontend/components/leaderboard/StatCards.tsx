@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { fetchLeaderboard } from "@/lib/supabase";
 import { getTierFromScore } from "@/lib/utils";
+import type { LeaderboardEntry } from "@/types/leaderboard";
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -17,59 +18,43 @@ function fmtUsd(n: number): string {
   return "$" + n.toFixed(0);
 }
 
-interface Stats {
-  totalTraders:  number;
-  totalScore:    number;
-  userRank:      number | null;
-  userScore:     number | null;
-  totalVolume:   number;
-  totalSwaps:    number;
-  totalPoints:   number;
-  userVolume:    number | null;
-  userSwaps:     number | null;
-}
-
-// Shared query key so both components hit the same cache
-const STATS_QUERY_KEY = (address: string | undefined) => ["leaderboard-stats", address];
-
-async function fetchStats(address: string | undefined): Promise<Stats> {
-  const rows = await fetchLeaderboard(10000);
-  const totalTraders = rows.filter((r) => r.score > 0).length;
-  const totalScore   = rows.reduce((s, r) => s + r.score, 0);
-  const userIdx  = address
-    ? rows.findIndex((r) => r.address.toLowerCase() === address.toLowerCase())
-    : -1;
-  const userRank  = userIdx >= 0 ? userIdx + 1 : null;
-  const userScore = userIdx >= 0 ? rows[userIdx].score : null;
-  const totalVolume  = rows.reduce((s, r) => s + (r.volume_usd  ?? 0), 0);
-  const totalSwaps   = rows.reduce((s, r) => s + (r.swap_count  ?? 0), 0);
-  const totalPoints  = totalScore; // same as totalScore
-  const userVolume   = userIdx >= 0 ? (rows[userIdx].volume_usd  ?? 0) : null;
-  const userSwaps    = userIdx >= 0 ? (rows[userIdx].swap_count  ?? 0) : null;
-  return { totalTraders, totalScore, userRank, userScore, totalVolume, totalSwaps, totalPoints, userVolume, userSwaps };
-}
-
-// ── Existing top-row stat cards ───────────────────────────────────────────────
-export function StatCards() {
-  const { address } = useAccount();
-
-  const { data } = useQuery<Stats>({
-    queryKey: STATS_QUERY_KEY(address),
-    queryFn:  () => fetchStats(address),
+// Use the SAME query key as useLeaderboard so both share the same cache
+function useLeaderboardData() {
+  return useQuery<LeaderboardEntry[]>({
+    queryKey: ["leaderboard"],
+    queryFn: async () => {
+      const data = await fetchLeaderboard(10000);
+      return data.map((row, i) => {
+        const tier = getTierFromScore(row.score);
+        return { ...row, rank: i + 1, tier_name: tier.name, tier_id: tier.id };
+      });
+    },
     staleTime: 5_000,
   });
+}
 
-  const rankValue = data?.userRank ? `#${data.userRank}` : "—";
+// ── Wallet rank + user stats card ────────────────────────────────────────────
+export function StatCards() {
+  const { address } = useAccount();
+  const { data: entries = [] } = useLeaderboardData();
+
+  const userEntry = address
+    ? entries.find((e) => e.address.toLowerCase() === address.toLowerCase())
+    : undefined;
+
+  const userRank   = userEntry?.rank ?? null;
+  const userScore  = userEntry?.score ?? null;
+  const userVolume = userEntry?.volume_usd ?? null;
+  const userSwaps  = userEntry?.swap_count ?? null;
+  const rankValue  = userRank ? `#${userRank}` : "—";
 
   return (
     <div className="grid grid-cols-1 gap-3 mb-6">
-      {/* ── Wallet rank card — horizontally scrollable on mobile ── */}
       <div className="rounded-xl border border-[--border] bg-[--bg-card] overflow-hidden">
         <div className="overflow-x-auto">
           <div style={{ minWidth: 380 }}>
-            {/* Single row: label + values on same line */}
+            {/* Header row */}
             <div className="grid grid-cols-[28px_1fr_72px_88px_72px] sm:grid-cols-[36px_1fr_80px_96px_80px] gap-2 sm:gap-3 px-3 sm:px-5 border-b border-[--border]">
-              {/* YOUR WALLET RANK — header */}
               <div className="col-span-2 flex items-center py-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[--text-secondary]">Your wallet rank</span>
               </div>
@@ -83,13 +68,13 @@ export function StatCards() {
                 <span className="text-[22px] font-black text-[--text-primary]" style={{ lineHeight: 1.1 }}>{rankValue}</span>
               </div>
               <span className="text-sm font-black text-right" style={{ color: "#C9693A" }}>
-                {data?.userScore != null ? fmt(data.userScore) : "—"}
+                {userScore != null ? fmt(userScore) : "—"}
               </span>
               <span className="text-sm font-semibold text-right text-[--text-primary]">
-                {data?.userVolume != null ? fmtUsd(data.userVolume) : "—"}
+                {userVolume != null ? fmtUsd(userVolume) : "—"}
               </span>
               <span className="text-sm font-semibold text-right text-[--text-primary]">
-                {data?.userSwaps != null ? fmt(data.userSwaps) : "—"}
+                {userSwaps != null ? fmt(userSwaps) : "—"}
               </span>
             </div>
           </div>
@@ -99,20 +84,18 @@ export function StatCards() {
   );
 }
 
-// ── New aggregate cards row ───────────────────────────────────────────────────
+// ── Aggregate cards row ───────────────────────────────────────────────────────
 export function AggregateCards() {
-  const { address } = useAccount();
+  const { data: entries = [] } = useLeaderboardData();
 
-  const { data } = useQuery<Stats>({
-    queryKey: STATS_QUERY_KEY(address),
-    queryFn:  () => fetchStats(address),
-    staleTime: 5_000,
-  });
+  const totalVolume  = entries.reduce((s, r) => s + (r.volume_usd  ?? 0), 0);
+  const totalSwaps   = entries.reduce((s, r) => s + (r.swap_count  ?? 0), 0);
+  const totalTraders = entries.filter((r) => r.score > 0).length;
 
   const cards = [
-    { label: "ROUTIS TOTAL VOLUME", value: data ? fmtUsd(data.totalVolume) : "—" },
-    { label: "ROUTIS TOTAL SWAP",    value: data ? fmt(data.totalSwaps)     : "—" },
-    { label: "ROUTIS TOTAL TRADERS", value: data ? fmt(data.totalTraders)  : "—" },
+    { label: "ROUTIS TOTAL VOLUME",  value: entries.length ? fmtUsd(totalVolume) : "—" },
+    { label: "ROUTIS TOTAL SWAP",    value: entries.length ? fmt(totalSwaps)     : "—" },
+    { label: "ROUTIS TOTAL TRADERS", value: entries.length ? fmt(totalTraders)   : "—" },
   ];
 
   return (
