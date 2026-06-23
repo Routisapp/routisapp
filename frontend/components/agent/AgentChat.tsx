@@ -210,7 +210,7 @@ export function AgentChat() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: "calc(100dvh - 56px - 64px)", background: "var(--bg-primary)" }}
+      style={{ height: "calc(100dvh - 56px - 64px - env(safe-area-inset-bottom))", background: "var(--bg-primary)" }}
     >
 
       {/* Title — sticky header */}
