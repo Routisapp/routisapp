@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     shortcut:"/logo1.png",
   },
   other: {
-    "base:app_id": "6a3eb0f5fb80a74d69497aad",
+    "base:app_id": "bc_92yf9czs",
   },
 };
 

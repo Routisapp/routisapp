@@ -16,7 +16,7 @@ import { Attribution } from "ox/erc8021";
 
 // Builder Code — base.dev > Settings > Builder Code
 const DATA_SUFFIX = Attribution.toDataSuffix({
-  codes: ["6a3eb0f5fb80a74d69497aad"],
+  codes: ["bc_92yf9czs"],
 });
 
 const connectors = connectorsForWallets(
