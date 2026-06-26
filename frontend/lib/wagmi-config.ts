@@ -12,6 +12,12 @@ import {
   injectedWallet,
   walletConnectWallet,
 } from "@rainbow-me/rainbowkit/wallets";
+import { Attribution } from "ox/erc8021";
+
+// Builder Code — base.dev > Settings > Builder Code
+const DATA_SUFFIX = Attribution.toDataSuffix({
+  codes: ["6a3eb0f5fb80a74d69497aad"],
+});
 
 const connectors = connectorsForWallets(
   [
@@ -40,5 +46,6 @@ export const wagmiConfig = createConfig({
   transports: {
     [base.id]: http(),
   },
+  dataSuffix: DATA_SUFFIX,
   ssr: true,
 });

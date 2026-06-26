@@ -210,7 +210,7 @@ The **History** tab lists all past transactions made through Routis.
 
 A tiered system where users earn extra points by bringing in new traders through their own invite link.
 
-The referral link follows the format \`https://routis.app/ref/{address}\`. Two counters are shown: number of friends invited and points earned.
+The referral link follows the format \`https://www.routis.app/ref/{address}\`. Two counters are shown: number of friends invited and points earned.
 
 **Referral tiers:**
 
@@ -321,7 +321,7 @@ The two systems operate independently: Wallet Score feeds the global ranking in 
 - The AI Agent only suggests a route; fund movement only happens once explicit approval is given on the Swap Preview screen.
 - Always verify the official domain to guard against phishing clones.
 
-🔗 **Website** — [routis.app](https://routis.app)
+🔗 **Website** — [routis.app](https://www.routis.app)
 🔗 **X (Twitter)** — [x.com/RoutisApp](https://x.com/RoutisApp)
 `;
 
