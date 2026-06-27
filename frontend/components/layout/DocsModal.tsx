@@ -89,9 +89,9 @@ The Routis AI Agent is an autonomous assistant that lets users describe swaps in
 
 1. Type your instruction in natural language into the box at the bottom of the page (e.g. "convert 0.005 ETH to USDC").
 2. The Agent processes the request and returns a **Swap Ready** card: amount being sent, estimated amount to be received, selected route, DEX fee, price impact, slippage.
-3. The **Swap Preview** screen additionally shows the AI Agent fee (0.2 USDC). You can back out with "Cancel," or trigger the x402 payment flow and execute the transaction with "Confirm Swap."
+3. The **Swap Preview** screen additionally shows the AI Agent fee (0.3 USDC). You can back out with "Cancel," or trigger the x402 payment flow and execute the transaction with "Confirm Swap."
 
-> ⚠️ This 0.2 USDC fee is charged separately on every confirmed transaction, on top of the DEX pool fee.
+> ⚠️ This 0.3 USDC fee is charged separately on every confirmed transaction, on top of the DEX pool fee.
 
 🎁 In the Reward system, the "Swap with AI Agent" task awards **+250 points** for every transaction confirmed via x402 (2.5x a standard Swap).
 

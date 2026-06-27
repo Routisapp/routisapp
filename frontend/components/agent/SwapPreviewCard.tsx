@@ -101,7 +101,7 @@ export function SwapPreviewCard({ preview, onConfirm, onCancel, isPending }: Pro
             ⚠️ High price impact — consider a smaller amount
           </p>
         )}
-        <Row label="AI Agent fee" value="0.2 USDC" valueColor="var(--text-secondary)" />
+        <Row label="AI Agent fee" value="0.3 USDC" valueColor="var(--text-secondary)" />
       </div>
 
       {/* Buttons */}
