@@ -212,7 +212,17 @@ export default function MintPage() {
 
           {!address && (
             <div className="flex justify-center mt-2">
-              <ConnectButton />
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <button
+                    onClick={openConnectModal}
+                    className="rounded-2xl px-6 py-2.5 text-sm font-bold text-white transition-all hover:brightness-110"
+                    style={{ background: "#C9693A" }}
+                  >
+                    Connect Wallet
+                  </button>
+                )}
+              </ConnectButton.Custom>
             </div>
           )}
         </div>
