@@ -38,5 +38,3 @@ export const POINTS = {
   NFT_MINT:     100,  // NFT mint
   STREAK_7_DAY: 500,  // 7 gün üst üste işlem
 } as const;
-
-export const TRADER_NFT_ADDRESS = "0x4Cc46F9C45D41cE7446cA6D069a93beb99f5ba2D" as `0x${string}`;
