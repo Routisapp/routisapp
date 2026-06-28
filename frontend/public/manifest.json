@@ -1,0 +1,23 @@
+{
+  "name": "Routis",
+  "short_name": "Routis",
+  "description": "Best swap rates on Base network",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5efe8",
+  "theme_color": "#C9693A",
+  "icons": [
+    {
+      "src": "/logo1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

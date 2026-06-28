@@ -13,6 +13,22 @@ export const metadata: Metadata = {
     apple:   "/logo1.png",
     shortcut:"/logo1.png",
   },
+  manifest: "/manifest.json",
+  openGraph: {
+    title:       "Routis — DEX Aggregator",
+    description: "Best swap rates on Base network",
+    url:         "https://www.routis.app",
+    siteName:    "Routis",
+    images: [
+      {
+        url:    "/logo1.png",
+        width:  512,
+        height: 512,
+        alt:    "Routis Logo",
+      },
+    ],
+    type: "website",
+  },
   other: {
     "base:app_id": "bc_92yf9czs",
   },
