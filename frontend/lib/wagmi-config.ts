@@ -19,33 +19,39 @@ const DATA_SUFFIX = Attribution.toDataSuffix({
   codes: ["bc_92yf9czs"],
 });
 
-const connectors = connectorsForWallets(
-  [
+function buildWagmiConfig() {
+  const connectors = connectorsForWallets(
+    [
+      {
+        groupName: "Yüklendi",
+        wallets: [rabbyWallet, metaMaskWallet, phantomWallet],
+      },
+      {
+        groupName: "Browser Wallets",
+        wallets: [injectedWallet, trustWallet, okxWallet],
+      },
+      {
+        groupName: "Diğer",
+        wallets: [coinbaseWallet, rainbowWallet, walletConnectWallet],
+      },
+    ],
     {
-      groupName: "Yüklendi",
-      wallets: [rabbyWallet, metaMaskWallet, phantomWallet],
+      appName:   "Routis",
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "a229ba28beb005bc1db48e73d6c3585f",
     },
-    {
-      groupName: "Browser Wallets",
-      wallets: [injectedWallet, trustWallet, okxWallet],
-    },
-    {
-      groupName: "Diğer",
-      wallets: [coinbaseWallet, rainbowWallet, walletConnectWallet],
-    },
-  ],
-  {
-    appName:   "Routis",
-    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "a229ba28beb005bc1db48e73d6c3585f",
-  },
-);
+  );
 
-export const wagmiConfig = createConfig({
-  chains:     [base],
-  connectors,
-  transports: {
-    [base.id]: http(),
-  },
-  dataSuffix: DATA_SUFFIX,
-  ssr: true,
-});
+  return createConfig({
+    chains:     [base],
+    connectors,
+    transports: {
+      [base.id]: http(),
+    },
+    dataSuffix: DATA_SUFFIX,
+    ssr: true,
+  });
+}
+
+// Singleton: sunucuda her request'te yeniden oluşturulmasın,
+// tarayıcıda ise tek instance kalasın.
+export const wagmiConfig = buildWagmiConfig();
