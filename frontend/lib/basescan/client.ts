@@ -10,6 +10,13 @@
  */
 
 import { formatUnits } from "viem";
+import axios from "axios";
+import https from "https";
+
+// Custom HTTPS agent that ignores SSL verification (development only)
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
 
 // ── Blockscout ───────────────────────────────────────────────────────────────
 
@@ -18,9 +25,8 @@ const BS_URL = "https://base.blockscout.com/api/v2";
 async function bsGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const qs  = new URLSearchParams(params).toString();
   const url = `${BS_URL}${path}${qs ? `?${qs}` : ""}`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Blockscout HTTP ${res.status}`);
-  return res.json() as Promise<T>;
+  const response = await axios.get<T>(url, { httpsAgent });
+  return response.data;
 }
 
 export interface BlockscoutTx {
@@ -77,16 +83,15 @@ export async function fetchAddressInfo(address: string): Promise<{
 const ALCHEMY_URL = `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY ?? ""}`;
 
 async function alchemyRpc<T>(method: string, params: unknown[]): Promise<T> {
-  const res = await fetch(ALCHEMY_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    cache:   "no-store",
-  });
-  if (!res.ok) throw new Error(`Alchemy HTTP ${res.status}`);
-  const json = await res.json();
-  if (json.error) throw new Error(`Alchemy RPC error: ${json.error.message}`);
-  return json.result as T;
+  const response = await axios.post(
+    ALCHEMY_URL,
+    { jsonrpc: "2.0", id: 1, method, params },
+    { httpsAgent }
+  );
+  if (response.data.error) {
+    throw new Error(`Alchemy RPC error: ${response.data.error.message}`);
+  }
+  return response.data.result as T;
 }
 
 interface AlchemyTransfer {
@@ -207,16 +212,16 @@ async function batchGetReceipts(
       params:  [hash],
     }));
 
-    const res = await fetch(ALCHEMY_URL, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(batch),
-      cache:   "no-store",
-    });
+    const response = await axios.post(
+      ALCHEMY_URL,
+      batch,
+      { httpsAgent }
+    );
 
-    if (!res.ok) continue;
-    const json: Array<{ result: { gasUsed: string; effectiveGasPrice: string } | null }> =
-      await res.json();
+    if (!response.data) continue;
+    const json: Array<{ result: { gasUsed: string; effectiveGasPrice: string } | null }> = Array.isArray(response.data)
+      ? response.data
+      : [];
 
     for (const item of json) {
       if (item?.result?.gasUsed && item?.result?.effectiveGasPrice) {
@@ -249,6 +254,9 @@ export interface WalletChainStats {
  */
 export async function fetchChainStats(address: string): Promise<WalletChainStats> {
   try {
+    console.log("[fetchChainStats] Starting for address:", address);
+    console.log("[fetchChainStats] Alchemy URL:", ALCHEMY_URL);
+    console.log("[fetchChainStats] API Key exists:", !!process.env.ALCHEMY_API_KEY);
     const lower = address.toLowerCase();
 
     // Step 1: parallel fetch — nonce + all sent transfers (timestamps, active days, gas hashes)
@@ -295,13 +303,12 @@ export async function fetchChainStats(address: string): Promise<WalletChainStats
     // ETH price for USD volume calculation
     let ethPriceUsd = 0;
     try {
-      const priceRes = await fetch(
+      const priceRes = await axios.get(
         `https://api.g.alchemy.com/prices/v1/${process.env.ALCHEMY_API_KEY}/tokens/by-symbol?symbols=ETH`,
-        { cache: "no-store" }
+        { httpsAgent }
       );
-      if (priceRes.ok) {
-        const priceJson = await priceRes.json();
-        ethPriceUsd = parseFloat(priceJson?.data?.[0]?.prices?.[0]?.value ?? "0");
+      if (priceRes.data) {
+        ethPriceUsd = parseFloat(priceRes.data?.data?.[0]?.prices?.[0]?.value ?? "0");
       }
     } catch { /* fallback */ }
 
@@ -316,9 +323,11 @@ export async function fetchChainStats(address: string): Promise<WalletChainStats
       ? Math.round(totalEthSent * ethPriceUsd * 100) / 100
       : 0;
 
+    console.log("[fetchChainStats] Success:", { totalTxs: sentTxs, activeDays, uniqueAddresses });
     return { totalTxs: sentTxs, firstTxDate, activeDays, uniqueAddresses, lastTxDate, gasFees, baseVolumeUsd };
   } catch (err) {
     console.error("[fetchChainStats] ERROR:", err);
+    console.error("[fetchChainStats] Stack:", (err as Error).stack);
     return { totalTxs: 0, firstTxDate: "", lastTxDate: "", activeDays: 0, uniqueAddresses: 0, gasFees: "0", baseVolumeUsd: 0 };
   }
 }
