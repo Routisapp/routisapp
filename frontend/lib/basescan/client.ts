@@ -22,11 +22,20 @@ const httpsAgent = new https.Agent({
 
 const BS_URL = "https://base.blockscout.com/api/v2";
 
-async function bsGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+async function bsGet<T>(path: string, params: Record<string, string> = {}, retries = 3): Promise<T> {
   const qs  = new URLSearchParams(params).toString();
   const url = `${BS_URL}${path}${qs ? `?${qs}` : ""}`;
-  const response = await axios.get<T>(url, { httpsAgent });
-  return response.data;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await axios.get<T>(url, { httpsAgent, timeout: 10000 });
+      return response.data;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // exponential backoff
+    }
+  }
+  throw new Error("Failed after retries");
 }
 
 export interface BlockscoutTx {
@@ -75,7 +84,13 @@ export async function fetchAddressInfo(address: string): Promise<{
   coin_balance: string | null;
   hash:         string;
 }> {
-  return bsGet<{ coin_balance: string | null; hash: string }>(`/addresses/${address}`);
+  try {
+    return await bsGet<{ coin_balance: string | null; hash: string }>(`/addresses/${address}`);
+  } catch (error) {
+    console.error("[Blockscout] fetchAddressInfo failed:", error);
+    // Return default values if Blockscout fails
+    return { coin_balance: "0", hash: address };
+  }
 }
 
 // ── Alchemy RPC ──────────────────────────────────────────────────────────────
