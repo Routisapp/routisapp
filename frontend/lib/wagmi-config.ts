@@ -19,6 +19,16 @@ const DATA_SUFFIX = Attribution.toDataSuffix({
   codes: ["bc_92yf9czs"],
 });
 
+// 🧪 DEBUG: Builder Code kontrolü
+console.log("════════════════════════════════════════");
+console.log("🔧 BUILDER CODE CONFIG");
+console.log("════════════════════════════════════════");
+console.log("Builder Code:", "bc_92yf9czs");
+console.log("Data Suffix:", DATA_SUFFIX);
+console.log("Suffix Type:", typeof DATA_SUFFIX);
+console.log("Suffix Length:", DATA_SUFFIX?.length);
+console.log("════════════════════════════════════════");
+
 function buildWagmiConfig() {
   const connectors = connectorsForWallets(
     [

@@ -25,7 +25,7 @@
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
     "sonner": "1.7.2",
-    "viem": "2.21.54",
+    "viem": "^2.54.6",
     "wagmi": "2.14.16",
     "zustand": "4.5.5"
   },
