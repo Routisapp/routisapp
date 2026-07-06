@@ -8,13 +8,22 @@
 import { useState } from "react";
 import { useWriteContract, usePublicClient, useSendTransaction } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { encodeFunctionData, erc20Abi, maxUint256, formatUnits } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256, formatUnits, concat } from "viem";
+import { Attribution } from "ox/erc8021";
 import { toast } from "sonner";
 import { insertSwapRecord } from "@/lib/supabase";
 import { basescanTx, fetchTokenPrice } from "@/lib/utils";
 import type { SwapExecuteParams, SwapStatus } from "@/types/swap";
 import { DEX_ROUTERS } from "@/constants/dex-addresses";
 import { AERODROME_FACTORY } from "@/constants/dex-registry";
+
+// 🔧 Builder Code Attribution
+const BUILDER_CODE_SUFFIX = Attribution.toDataSuffix({ codes: ["bc_92yf9czs"] }) as `0x${string}`;
+
+// Helper: Append builder code to transaction data
+function appendBuilderCode(data: `0x${string}`): `0x${string}` {
+  return concat([data, BUILDER_CODE_SUFFIX]);
+}
 
 const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const WETH       = "0x4200000000000000000000000000000000000006" as const;
@@ -135,6 +144,23 @@ export function useSwapExecute(onSuccess?: () => void) {
   // usePublicClient uses the wallet's connected provider — no CORS issues
   const walletClient = usePublicClient();
 
+  // 🔧 Wrapper: writeContract with builder code
+  async function writeWithBuilderCode(params: Parameters<typeof writeContractAsync>[0]) {
+    const data = encodeFunctionData({
+      abi: params.abi,
+      functionName: params.functionName,
+      args: params.args,
+    });
+    const dataWithBuilder = appendBuilderCode(data);
+    
+    return sendTransactionAsync({
+      to: params.address,
+      data: dataWithBuilder,
+      value: params.value || 0n,
+      gas: params.gas,
+    });
+  }
+
   async function execute(params: SwapExecuteParams, userAddress: string, swapType: "swap" | "multi_swap" | "ai_agent" = "swap") {
     setStatus("swapping");
     toast.loading("Sending transaction...", { id: "swap" });
@@ -200,23 +226,27 @@ export function useSwapExecute(onSuccess?: () => void) {
 
       // ── WETH wrap / unwrap (direkt WETH contract, no router) ─
       if (wethOp === "wrap") {
-        // deposit() — sendTransactionAsync bypasses simulation, no CORS
+        // deposit() — with builder code
+        const wrapData = encodeFunctionData({ abi: WETH_ABI, functionName: "deposit" });
+        const wrapDataWithBuilder = appendBuilderCode(wrapData);
         hash = await sendTransactionAsync({
           to:    WETH,
-          data:  encodeFunctionData({ abi: WETH_ABI, functionName: "deposit" }),
+          data:  wrapDataWithBuilder,
           value: params.amountIn,
           gas:   60000n,
         });
 
       } else if (wethOp === "unwrap") {
-        // withdraw() — sendTransactionAsync bypasses simulation, no CORS
+        // withdraw() — with builder code
+        const unwrapData = encodeFunctionData({
+          abi:          WETH_ABI,
+          functionName: "withdraw",
+          args:         [params.amountIn],
+        });
+        const unwrapDataWithBuilder = appendBuilderCode(unwrapData);
         hash = await sendTransactionAsync({
           to:   WETH,
-          data: encodeFunctionData({
-            abi:          WETH_ABI,
-            functionName: "withdraw",
-            args:         [params.amountIn],
-          }),
+          data: unwrapDataWithBuilder,
           gas: 60000n,
         });
 
@@ -228,9 +258,11 @@ export function useSwapExecute(onSuccess?: () => void) {
         if (isNativeOut) {
           const swapData   = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle", args: [{ tokenIn, tokenOut: WETH, fee: params.quote.fee, recipient: router, amountIn: params.amountIn, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }] });
           const unwrapData = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "unwrapWETH9",      args: [amountOutMin, params.recipient as `0x${string}`] });
-          hash = await writeContractAsync({ address: router, abi: UNIV3_ROUTER_ABI, functionName: "multicall", args: [[swapData, unwrapData]], value: 0n });
+          const multicallData = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "multicall", args: [[swapData, unwrapData]] });
+          const multicallDataWithBuilder = appendBuilderCode(multicallData);
+          hash = await sendTransactionAsync({ to: router, data: multicallDataWithBuilder, value: 0n });
         } else {
-          hash = await writeContractAsync({
+          hash = await writeWithBuilderCode({
             address: router, abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle",
             args: [{ tokenIn, tokenOut, fee: params.quote.fee, recipient: params.recipient as `0x${string}`, amountIn: params.amountIn, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }],
             value: isNativeIn ? params.amountIn : 0n,
@@ -244,11 +276,11 @@ export function useSwapExecute(onSuccess?: () => void) {
         const route    = [{ from: tokenIn, to: tokenOut, stable: isStable, factory: AERODROME_FACTORY }];
 
         if (isNativeIn) {
-          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, route, params.recipient as `0x${string}`, deadline], value: params.amountIn });
+          hash = await writeWithBuilderCode({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, route, params.recipient as `0x${string}`, deadline], value: params.amountIn });
         } else if (isNativeOut) {
-          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
+          hash = await writeWithBuilderCode({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
         } else {
-          hash = await writeContractAsync({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
+          hash = await writeWithBuilderCode({ address: router, abi: AERODROME_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, route, params.recipient as `0x${string}`, deadline] });
         }
 
       // ── SushiSwap ─────────────────────────────────────────────
@@ -257,11 +289,11 @@ export function useSwapExecute(onSuccess?: () => void) {
         const path   = [tokenIn, WETH, tokenOut].filter((v, i, a) => i === 0 || v !== a[i - 1]) as `0x${string}`[];
 
         if (isNativeIn) {
-          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, path, params.recipient as `0x${string}`, deadline], value: params.amountIn });
+          hash = await writeWithBuilderCode({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactETHForTokens", args: [amountOutMin, path, params.recipient as `0x${string}`, deadline], value: params.amountIn });
         } else if (isNativeOut) {
-          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
+          hash = await writeWithBuilderCode({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForETH", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
         } else {
-          hash = await writeContractAsync({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
+          hash = await writeWithBuilderCode({ address: router, abi: SUSHI_ROUTER_ABI, functionName: "swapExactTokensForTokens", args: [params.amountIn, amountOutMin, path, params.recipient as `0x${string}`, deadline] });
         }
 
       } else {
