@@ -118,6 +118,12 @@ export function SwapLayout() {
       setAmountIn(formatInputAmount(raw, tokenIn.decimals));
     }
     setSelectedDex(null);
+    // Force refetch quotes after amount changes
+    setTimeout(() => {
+      if (!isWethEthPair) {
+        refetchQuotes().catch(() => {/* ignore */});
+      }
+    }, 500); // Wait for debounce + small buffer
   }
 
   function swapTokens() {
@@ -131,15 +137,27 @@ export function SwapLayout() {
     if (!activeQuote) return;
     if (needsApproval) { await approve(); return; }
 
-    // Refetch quotes and use the freshest data; fall back to cached activeQuote
+    // Refetch quotes with retry logic for better reliability
     let quoteToUse = activeQuote;
     if (!isWethEthPair) {
       try {
         const result = await refetchQuotes();
         const freshQuotes = result.data ?? [];
         const fresh = freshQuotes.find((q) => q.dex === selectedDex) ?? freshQuotes[0];
-        if (fresh) quoteToUse = fresh;
-      } catch { /* use cached quote */ }
+        if (fresh) {
+          quoteToUse = fresh;
+        } else {
+          // If no fresh quotes, try one more time after 1s
+          await new Promise(r => setTimeout(r, 1000));
+          const retry = await refetchQuotes();
+          const retryQuotes = retry.data ?? [];
+          const retryFresh = retryQuotes.find((q) => q.dex === selectedDex) ?? retryQuotes[0];
+          if (retryFresh) quoteToUse = retryFresh;
+        }
+      } catch (err) {
+        console.warn("[handleSwap] Quote refetch failed, using cached quote", err);
+        // use cached quote
+      }
     }
 
     await execute(

@@ -88,18 +88,36 @@ async function rawQuoteV3(
     + pad32(amtIn)
     + pad24(fee)
     + pad32(0n)) as `0x${string}`;
-  try {
-    // Pass account: undefined to prevent wagmi injecting the connected wallet
-    // as `from` — QuoterV2 reverts when called from non-zero addresses
-    const r = await client.call({ to: quoter, data, account: undefined });
-    if (!r.data || r.data === "0x") return null;
-    const hex = r.data.slice(2);
-    if (hex.length < 64) return null;
-    const amountOut   = BigInt("0x" + hex.slice(0, 64));
-    // gasEstimate is the 4th return value (slot index 3, bytes 192-256)
-    const gasEstimate = hex.length >= 256 ? BigInt("0x" + hex.slice(192, 256)) : 150_000n;
-    return amountOut > 0n ? { amountOut, gas: gasEstimate } : null;
-  } catch { return null; }
+  
+  // Retry logic for reliability
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      // Pass account: undefined to prevent wagmi injecting the connected wallet
+      // as `from` — QuoterV2 reverts when called from non-zero addresses
+      const r = await client.call({ to: quoter, data, account: undefined });
+      if (!r.data || r.data === "0x") {
+        if (attempt === 0) {
+          await new Promise(r => setTimeout(r, 300)); // Wait 300ms before retry
+          continue;
+        }
+        return null;
+      }
+      const hex = r.data.slice(2);
+      if (hex.length < 64) return null;
+      const amountOut   = BigInt("0x" + hex.slice(0, 64));
+      // gasEstimate is the 4th return value (slot index 3, bytes 192-256)
+      const gasEstimate = hex.length >= 256 ? BigInt("0x" + hex.slice(192, 256)) : 150_000n;
+      return amountOut > 0n ? { amountOut, gas: gasEstimate } : null;
+    } catch (err) {
+      if (attempt === 0) {
+        await new Promise(r => setTimeout(r, 300)); // Wait before retry
+        continue;
+      }
+      console.warn(`[rawQuoteV3] Failed after retry:`, err);
+      return null;
+    }
+  }
+  return null;
 }
 
 // Both DEXes use the same selector and ABI encoding
