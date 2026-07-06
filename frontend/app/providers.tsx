@@ -81,7 +81,7 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
     <RainbowKitProvider theme={rkTheme ?? lightTheme()} avatar={CustomAvatar}>
       {children}
       <Toaster
-        position="top-right"
+        position="bottom-right"
         toastOptions={{ style: toastStyle }}
       />
     </RainbowKitProvider>
