@@ -148,10 +148,18 @@ export function useSwapExecute(onSuccess?: () => void) {
   async function writeWithBuilderCode(params: Parameters<typeof writeContractAsync>[0]) {
     const data = encodeFunctionData({
       abi: params.abi,
-      functionName: params.functionName,
-      args: params.args,
+      functionName: params.functionName as string,
+      args: params.args as readonly unknown[],
     });
     const dataWithBuilder = appendBuilderCode(data);
+    
+    // Debug log
+    console.log("🔧 writeWithBuilderCode:", {
+      function: params.functionName,
+      originalData: data,
+      withBuilder: dataWithBuilder,
+      builderSuffix: BUILDER_CODE_SUFFIX,
+    });
     
     return sendTransactionAsync({
       to: params.address,
