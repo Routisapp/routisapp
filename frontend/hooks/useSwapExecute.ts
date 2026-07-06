@@ -213,7 +213,8 @@ export function useSwapExecute(onSuccess?: () => void) {
 
         if (allowance < params.amountIn) {
           toast.loading("Approving token...", { id: "swap" });
-          const approveTx = await writeContractAsync({
+          // Approve with builder code
+          const approveTx = await writeWithBuilderCode({
             address:      tokenIn,
             abi:          erc20Abi,
             functionName: "approve",
