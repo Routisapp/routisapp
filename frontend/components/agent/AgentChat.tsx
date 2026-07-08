@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useAccount, useWalletClient, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient, useWriteContract, useReadContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { parseUnits, erc20Abi } from "viem";
+import { parseUnits, erc20Abi, formatUnits } from "viem";
 import { useSwapExecute } from "@/hooks/useSwapExecute";
 import { BASE_TOKENS, NATIVE_ETH } from "@/constants/tokens";
 import { DEX_ID_BY_NAME } from "@/constants/dex-registry";
@@ -18,6 +18,41 @@ const EXAMPLE_PROMPTS = [
   "Swap 5 USDC to ETH",
   "Swap 0.005 ETH to USDC",
 ];
+
+// USDC Balance Display Component
+function UsdcBalanceDisplay({ address }: { address: `0x${string}` }) {
+  const { data: balance, refetch } = useReadContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [address],
+    query: {
+      enabled: !!address,
+      refetchInterval: 3_000, // Refresh every 3s
+    },
+  });
+
+  const balanceFormatted = balance ? formatUnits(balance as bigint, 6) : "0.00";
+  const balanceNum = parseFloat(balanceFormatted);
+
+  return (
+    <div 
+      className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-[#C9693A] bg-[#C9693A]/5"
+      style={{ minWidth: 140 }}
+    >
+      <div className="flex flex-col items-end">
+        <span className="text-xs text-[--text-secondary] font-medium">USDC Balance</span>
+        <span className="text-base font-bold text-[#C9693A] tabular-nums">
+          {balanceNum.toFixed(2)}
+        </span>
+      </div>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9693A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+    </div>
+  );
+}
 
 export function AgentChat() {
   const { address } = useAccount();
@@ -215,9 +250,16 @@ export function AgentChat() {
 
       {/* Title — sticky header */}
       <div className="shrink-0 px-4 pt-6 pb-4 bg-[--bg-primary]">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-2xl font-bold text-[#C9693A]">Routis AI Agent</h1>
-          <p className="mt-1 text-sm text-[--text-secondary]">I'll find the best swap route for you.</p>
+        <div className="mx-auto max-w-2xl flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-[#C9693A]">Routis AI Agent</h1>
+            <p className="mt-1 text-sm text-[--text-secondary]">I'll find the best swap route for you.</p>
+          </div>
+          
+          {/* USDC Balance Display */}
+          {address && (
+            <UsdcBalanceDisplay address={address} />
+          )}
         </div>
       </div>
 

@@ -6,9 +6,9 @@
 // Both resolve to this file. Do NOT create additional copies.
 
 import { useState } from "react";
-import { useWriteContract, usePublicClient, useSendTransaction } from "wagmi";
+import { useWriteContract, usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { encodeFunctionData, erc20Abi, maxUint256, formatUnits, concat } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256, formatUnits } from "viem";
 import { Attribution } from "ox/erc8021";
 import { toast } from "sonner";
 import { insertSwapRecord } from "@/lib/supabase";
@@ -17,13 +17,8 @@ import type { SwapExecuteParams, SwapStatus } from "@/types/swap";
 import { DEX_ROUTERS } from "@/constants/dex-addresses";
 import { AERODROME_FACTORY } from "@/constants/dex-registry";
 
-// 🔧 Builder Code Attribution
+// 🔧 Builder Code Attribution (B20 FUN approach)
 const BUILDER_CODE_SUFFIX = Attribution.toDataSuffix({ codes: ["bc_92yf9czs"] }) as `0x${string}`;
-
-// Helper: Append builder code to transaction data
-function appendBuilderCode(data: `0x${string}`): `0x${string}` {
-  return concat([data, BUILDER_CODE_SUFFIX]);
-}
 
 const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const WETH       = "0x4200000000000000000000000000000000000006" as const;
@@ -139,33 +134,23 @@ export function useSwapExecute(onSuccess?: () => void) {
   const [status,  setStatus]  = useState<SwapStatus>("idle");
   const [txHash,  setTxHash]  = useState<`0x${string}` | undefined>();
   const { writeContractAsync }   = useWriteContract();
-  const { sendTransactionAsync } = useSendTransaction();
   const queryClient = useQueryClient();
   // usePublicClient uses the wallet's connected provider — no CORS issues
   const walletClient = usePublicClient();
 
-  // 🔧 Wrapper: writeContract with builder code
+  // 🔧 Helper: writeContract with builder code using dataSuffix parameter (B20 FUN approach)
   async function writeWithBuilderCode(params: Parameters<typeof writeContractAsync>[0]) {
-    const data = encodeFunctionData({
-      abi: params.abi,
-      functionName: params.functionName as string,
-      args: params.args as readonly unknown[],
-    });
-    const dataWithBuilder = appendBuilderCode(data);
-    
     // Debug log
-    console.log("🔧 writeWithBuilderCode:", {
+    console.log("🔧 writeWithBuilderCode (dataSuffix approach):", {
       function: params.functionName,
-      originalData: data,
-      withBuilder: dataWithBuilder,
+      address: params.address,
       builderSuffix: BUILDER_CODE_SUFFIX,
     });
     
-    return sendTransactionAsync({
-      to: params.address,
-      data: dataWithBuilder,
-      value: params.value || 0n,
-      gas: params.gas,
+    // B20 FUN approach: use dataSuffix parameter directly
+    return writeContractAsync({
+      ...params,
+      dataSuffix: BUILDER_CODE_SUFFIX,
     });
   }
 
@@ -190,8 +175,10 @@ export function useSwapExecute(onSuccess?: () => void) {
     }
 
     const slippageBps  = BigInt(Math.round(params.slippage * 100));
-    const amountOutMin = params.quote.amountOut - (params.quote.amountOut * slippageBps) / 10000n;
-    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 60 * 20);
+    // Ensure slippage is at least 0.5% to prevent failures
+    const effectiveSlippageBps = slippageBps < 50n ? 50n : slippageBps;
+    const amountOutMin = params.quote.amountOut - (params.quote.amountOut * effectiveSlippageBps) / 10000n;
+    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 60 * 30); // 30 minutes deadline
 
     const isNativeIn  = params.tokenIn.toLowerCase()  === NATIVE_ETH.toLowerCase();
     const isNativeOut = params.tokenOut.toLowerCase() === NATIVE_ETH.toLowerCase();
@@ -212,51 +199,81 @@ export function useSwapExecute(onSuccess?: () => void) {
                                                    DEX_ROUTERS.SUSHISWAP
         ) as `0x${string}`;
 
-        const allowance = await client.readContract({
-          address:      tokenIn,
-          abi:          erc20Abi,
-          functionName: "allowance",
-          args:         [params.recipient as `0x${string}`, spender],
-        }) as bigint;
+        // Check allowance with retry
+        let allowance = 0n;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            allowance = await client.readContract({
+              address:      tokenIn,
+              abi:          erc20Abi,
+              functionName: "allowance",
+              args:         [params.recipient as `0x${string}`, spender],
+            }) as bigint;
+            break; // Success
+          } catch (err) {
+            if (attempt < 2) {
+              console.warn(`[approve check] Attempt ${attempt + 1} failed, retrying...`);
+              await new Promise(r => setTimeout(r, 500));
+            } else {
+              console.error("[approve check] All attempts failed:", err);
+              // Assume no allowance to be safe
+              allowance = 0n;
+            }
+          }
+        }
 
         if (allowance < params.amountIn) {
           toast.loading("Approving token...", { id: "swap" });
-          // Approve with builder code
-          const approveTx = await writeWithBuilderCode({
-            address:      tokenIn,
-            abi:          erc20Abi,
-            functionName: "approve",
-            args:         [spender, maxUint256],
-          });
-          await client.waitForTransactionReceipt({ hash: approveTx });
-          toast.loading("Sending transaction...", { id: "swap" });
+          
+          try {
+            // Approve with builder code
+            const approveTx = await writeWithBuilderCode({
+              address:      tokenIn,
+              abi:          erc20Abi,
+              functionName: "approve",
+              args:         [spender, maxUint256],
+            });
+            
+            // Wait for approval confirmation
+            await client.waitForTransactionReceipt({ hash: approveTx, confirmations: 1 });
+            
+            // Wait a bit for state to update
+            await new Promise(r => setTimeout(r, 1500));
+            
+            toast.loading("Sending transaction...", { id: "swap" });
+          } catch (approveErr) {
+            setStatus("error");
+            const msg = (approveErr instanceof Error ? approveErr.message : "").toLowerCase();
+            toast.error(
+              msg.includes("user rejected")  ? "Approval rejected"
+              : msg.includes("insufficient") ? "Insufficient ETH for gas"
+              : "Approval failed",
+              { id: "swap" },
+            );
+            throw approveErr; // Re-throw to stop swap execution
+          }
         }
       }
 
       // ── WETH wrap / unwrap (direkt WETH contract, no router) ─
       if (wethOp === "wrap") {
-        // deposit() — with builder code
-        const wrapData = encodeFunctionData({ abi: WETH_ABI, functionName: "deposit" });
-        const wrapDataWithBuilder = appendBuilderCode(wrapData);
-        hash = await sendTransactionAsync({
-          to:    WETH,
-          data:  wrapDataWithBuilder,
-          value: params.amountIn,
-          gas:   60000n,
+        // deposit() — with builder code (B20 FUN approach)
+        hash = await writeWithBuilderCode({
+          address:      WETH,
+          abi:          WETH_ABI,
+          functionName: "deposit",
+          value:        params.amountIn,
+          gas:          60000n,
         });
 
       } else if (wethOp === "unwrap") {
-        // withdraw() — with builder code
-        const unwrapData = encodeFunctionData({
+        // withdraw() — with builder code (B20 FUN approach)
+        hash = await writeWithBuilderCode({
+          address:      WETH,
           abi:          WETH_ABI,
           functionName: "withdraw",
           args:         [params.amountIn],
-        });
-        const unwrapDataWithBuilder = appendBuilderCode(unwrapData);
-        hash = await sendTransactionAsync({
-          to:   WETH,
-          data: unwrapDataWithBuilder,
-          gas: 60000n,
+          gas:          60000n,
         });
 
       // ── Uniswap V3 / PancakeSwap V3 ──────────────────────────
@@ -265,11 +282,34 @@ export function useSwapExecute(onSuccess?: () => void) {
           ? DEX_ROUTERS.UNISWAP_V3 : DEX_ROUTERS.PANCAKESWAP_V3) as `0x${string}`;
 
         if (isNativeOut) {
-          const swapData   = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle", args: [{ tokenIn, tokenOut: WETH, fee: params.quote.fee, recipient: router, amountIn: params.amountIn, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }] });
-          const unwrapData = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "unwrapWETH9",      args: [amountOutMin, params.recipient as `0x${string}`] });
-          const multicallData = encodeFunctionData({ abi: UNIV3_ROUTER_ABI, functionName: "multicall", args: [[swapData, unwrapData]] });
-          const multicallDataWithBuilder = appendBuilderCode(multicallData);
-          hash = await sendTransactionAsync({ to: router, data: multicallDataWithBuilder, value: 0n });
+          // ETH output: swap to WETH, then unwrap via multicall (B20 FUN approach)
+          const swapData = encodeFunctionData({
+            abi: UNIV3_ROUTER_ABI,
+            functionName: "exactInputSingle",
+            args: [{
+              tokenIn,
+              tokenOut: WETH,
+              fee: params.quote.fee,
+              recipient: router, // router holds WETH temporarily
+              amountIn: params.amountIn,
+              amountOutMinimum: amountOutMin,
+              sqrtPriceLimitX96: 0n,
+            }],
+          });
+          const unwrapData = encodeFunctionData({
+            abi: UNIV3_ROUTER_ABI,
+            functionName: "unwrapWETH9",
+            args: [amountOutMin, params.recipient as `0x${string}`],
+          });
+          
+          // Use writeWithBuilderCode for multicall (B20 FUN approach)
+          hash = await writeWithBuilderCode({
+            address: router,
+            abi: UNIV3_ROUTER_ABI,
+            functionName: "multicall",
+            args: [[swapData, unwrapData]],
+            value: isNativeIn ? params.amountIn : 0n,
+          });
         } else {
           hash = await writeWithBuilderCode({
             address: router, abi: UNIV3_ROUTER_ABI, functionName: "exactInputSingle",
@@ -317,14 +357,26 @@ export function useSwapExecute(onSuccess?: () => void) {
       } catch { /* non-blocking — proceed even if receipt polling fails */ }
 
       setStatus("success");
-      onSuccess?.();
 
-      // Invalidate all cached queries so balances and Routis stats refresh immediately
-      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
-      queryClient.invalidateQueries({ queryKey: ["leaderboard-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["wallet-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["swap-history"] });
-      queryClient.invalidateQueries({ queryKey: ["wallet-score-leaderboard"] });
+      // AGGRESSIVE: Invalidate and refetch ALL balance queries immediately
+      // This ensures balances update instantly after swap
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["balance"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboard-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["wallet-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["swap-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["wallet-score-leaderboard"] }),
+      ]);
+
+      // Immediate refetch to force update
+      queryClient.refetchQueries({ 
+        queryKey: ["balance"],
+        type: "active",
+      });
+
+      // Call onSuccess callback (which triggers balance refetch in SwapLayout)
+      onSuccess?.();
 
       toast.success("Swap successful!", {
         id:     "swap",
@@ -366,14 +418,32 @@ export function useSwapExecute(onSuccess?: () => void) {
     } catch (err: unknown) {
       setStatus("error");
       const msg = (err instanceof Error ? err.message : "").toLowerCase();
-      toast.error(
-        msg.includes("user rejected")  ? "Transaction rejected"
-        : msg.includes("insufficient") ? "Insufficient balance"
-        : msg.includes("no weth")      ? "No WETH balance to unwrap"
-        : msg.includes("slippage") || msg.includes("too little") ? "Price moved — try higher slippage"
-        : "Swap failed",
-        { id: "swap" },
-      );
+      
+      // Better error messages
+      let errorMessage = "Swap failed";
+      if (msg.includes("user rejected") || msg.includes("user denied")) {
+        errorMessage = "Transaction rejected";
+      } else if (msg.includes("insufficient")) {
+        if (msg.includes("allowance")) {
+          errorMessage = "Insufficient token allowance - please try approving again";
+        } else if (msg.includes("balance")) {
+          errorMessage = "Insufficient token balance";
+        } else {
+          errorMessage = "Insufficient ETH for gas";
+        }
+      } else if (msg.includes("slippage") || msg.includes("too little") || msg.includes("k")) {
+        errorMessage = "Price moved too much - try increasing slippage tolerance";
+      } else if (msg.includes("expired") || msg.includes("deadline")) {
+        errorMessage = "Transaction expired - please try again";
+      } else if (msg.includes("liquidity")) {
+        errorMessage = "Insufficient liquidity in pool";
+      } else if (msg.includes("no weth")) {
+        errorMessage = "No WETH balance to unwrap";
+      } else if (msg.includes("execution reverted")) {
+        errorMessage = "Transaction reverted - check slippage or try different DEX";
+      }
+      
+      toast.error(errorMessage, { id: "swap" });
       console.error("[swap error]", err);
       throw err;
     }

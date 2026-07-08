@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { parseUnits, formatUnits } from "viem";
@@ -41,6 +41,38 @@ export function SwapLayout() {
 
   const { balance, refetch: refetchBalance }                = useTokenBalance(address, tokenIn.address);
   const { balance: balanceOut, refetch: refetchBalanceOut } = useTokenBalance(address, tokenOut.address);
+  
+  // Aggressive balance refresh on mount and visibility change
+  const lastRefetchRef = useRef<number>(0);
+  
+  useEffect(() => {
+    if (!address) return;
+    
+    // Immediate refetch on mount
+    const now = Date.now();
+    if (now - lastRefetchRef.current > 500) { // Throttle to max 2 refetches per second
+      lastRefetchRef.current = now;
+      refetchBalance();
+      refetchBalanceOut();
+    }
+    
+    // Refetch when page becomes visible (e.g., returning from another tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const now = Date.now();
+        if (now - lastRefetchRef.current > 500) {
+          lastRefetchRef.current = now;
+          refetchBalance();
+          refetchBalanceOut();
+        }
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [address, refetchBalance, refetchBalanceOut]);
 
   const isWrap        = tokenIn.address === NATIVE_ETH   && tokenOut.address === WETH_ADDRESS;
   const isUnwrap      = tokenIn.address === WETH_ADDRESS && tokenOut.address === NATIVE_ETH;
@@ -90,9 +122,25 @@ export function SwapLayout() {
   );
 
   const { execute, status: swapStatus } = useSwapExecute(() => {
-    refetchBalance();
-    refetchBalanceOut();
-    // Kriter 7: swap tamamlanınca diyagramı anında güncelle (60s polling'i bekleme)
+    // Immediate balance refresh after successful swap
+    setTimeout(() => {
+      refetchBalance();
+      refetchBalanceOut();
+    }, 100); // Very quick refetch
+    
+    // Secondary refetch after 1 second to ensure blockchain state is updated
+    setTimeout(() => {
+      refetchBalance();
+      refetchBalanceOut();
+    }, 1000);
+    
+    // Tertiary refetch after 2 seconds for final confirmation
+    setTimeout(() => {
+      refetchBalance();
+      refetchBalanceOut();
+    }, 2000);
+    
+    // Route stats refresh
     refreshRouteStats();
   });
 
@@ -110,20 +158,19 @@ export function SwapLayout() {
 
   function setPct(pct: number) {
     if (balance === 0n) return;
+    
+    let newAmount: string;
     if (pct === 1.0) {
       // MAX: use trimmed input-safe string (no 18-decimal raw value)
-      setAmountIn(inputBalanceStr);
+      newAmount = inputBalanceStr;
     } else {
       const raw = (balance * BigInt(Math.round(pct * 10000))) / 10000n;
-      setAmountIn(formatInputAmount(raw, tokenIn.decimals));
+      newAmount = formatInputAmount(raw, tokenIn.decimals);
     }
+    
+    // Immediately update amount - this triggers useSwapQuotes via useEffect
+    setAmountIn(newAmount);
     setSelectedDex(null);
-    // Force refetch quotes after amount changes
-    setTimeout(() => {
-      if (!isWethEthPair) {
-        refetchQuotes().catch(() => {/* ignore */});
-      }
-    }, 500); // Wait for debounce + small buffer
   }
 
   function swapTokens() {
@@ -135,38 +182,93 @@ export function SwapLayout() {
     if (isWrap)   { await wrap(amountInWei);   setAmountIn(""); refetchBalance(); refetchBalanceOut(); return; }
     if (isUnwrap) { await unwrap(amountInWei); setAmountIn(""); refetchBalance(); refetchBalanceOut(); return; }
     if (!activeQuote) return;
-    if (needsApproval) { await approve(); return; }
+    
+    // Approve önce - eğer gerekiyorsa
+    if (needsApproval) { 
+      try {
+        await approve(); 
+        // Approve sonrası kısa bir bekleme - allowance update için
+        await new Promise(r => setTimeout(r, 1500));
+      } catch (err) {
+        console.error("[handleSwap] Approve failed:", err);
+        return; // Approve fail olursa swap'e devam etme
+      }
+      return; 
+    }
 
-    // Refetch quotes with retry logic for better reliability
+    // Fresh quote al - retry logic ile
     let quoteToUse = activeQuote;
     if (!isWethEthPair) {
       try {
+        // İlk deneme
         const result = await refetchQuotes();
         const freshQuotes = result.data ?? [];
         const fresh = freshQuotes.find((q) => q.dex === selectedDex) ?? freshQuotes[0];
-        if (fresh) {
+        
+        if (fresh && fresh.amountOut > 0n) {
           quoteToUse = fresh;
         } else {
-          // If no fresh quotes, try one more time after 1s
+          // Quote yoksa veya 0 ise - 1 saniye bekle ve tekrar dene
+          console.warn("[handleSwap] First quote attempt failed, retrying...");
           await new Promise(r => setTimeout(r, 1000));
-          const retry = await refetchQuotes();
-          const retryQuotes = retry.data ?? [];
-          const retryFresh = retryQuotes.find((q) => q.dex === selectedDex) ?? retryQuotes[0];
-          if (retryFresh) quoteToUse = retryFresh;
+          
+          const retry1 = await refetchQuotes();
+          const retryQuotes1 = retry1.data ?? [];
+          const retryFresh1 = retryQuotes1.find((q) => q.dex === selectedDex) ?? retryQuotes1[0];
+          
+          if (retryFresh1 && retryFresh1.amountOut > 0n) {
+            quoteToUse = retryFresh1;
+          } else {
+            // Son deneme - 1.5 saniye bekle
+            console.warn("[handleSwap] Second quote attempt failed, final retry...");
+            await new Promise(r => setTimeout(r, 1500));
+            
+            const retry2 = await refetchQuotes();
+            const retryQuotes2 = retry2.data ?? [];
+            const retryFresh2 = retryQuotes2.find((q) => q.dex === selectedDex) ?? retryQuotes2[0];
+            
+            if (retryFresh2 && retryFresh2.amountOut > 0n) {
+              quoteToUse = retryFresh2;
+            } else {
+              // Tüm denemeler başarısız - cached quote kullan
+              console.warn("[handleSwap] All quote attempts failed, using cached quote");
+            }
+          }
         }
       } catch (err) {
-        console.warn("[handleSwap] Quote refetch failed, using cached quote", err);
-        // use cached quote
+        console.error("[handleSwap] Quote refetch error:", err);
+        // Hata durumunda cached quote kullan
       }
     }
+    
+    // Final check - quote geçerli mi?
+    if (!quoteToUse || quoteToUse.amountOut === 0n) {
+      toast.error("Unable to get valid quote. Please try again.", { id: "swap" });
+      return;
+    }
 
-    await execute(
-      { quote: quoteToUse, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountInWei, slippage, recipient: address, decimalsIn: tokenIn.decimals, decimalsOut: tokenOut.decimals },
-      address,
-    );
-    // Clear input after successful swap (execute throws on failure, so this only runs on success)
-    setAmountIn("");
-    setSelectedDex(null);
+    // Swap execute
+    try {
+      await execute(
+        { 
+          quote: quoteToUse, 
+          tokenIn: tokenIn.address, 
+          tokenOut: tokenOut.address, 
+          amountIn: amountInWei, 
+          slippage, 
+          recipient: address, 
+          decimalsIn: tokenIn.decimals, 
+          decimalsOut: tokenOut.decimals 
+        },
+        address,
+      );
+      // Clear input after successful swap (execute throws on failure, so this only runs on success)
+      setAmountIn("");
+      setSelectedDex(null);
+    } catch (err) {
+      console.error("[handleSwap] Swap execution failed:", err);
+      // Error toast already shown by useSwapExecute
+    }
   }
 
   const btnLabel =
