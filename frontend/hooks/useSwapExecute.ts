@@ -6,9 +6,9 @@
 // Both resolve to this file. Do NOT create additional copies.
 
 import { useState } from "react";
-import { useWriteContract, usePublicClient } from "wagmi";
+import { useWriteContract, usePublicClient, useSendTransaction } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { encodeFunctionData, erc20Abi, maxUint256, formatUnits } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256, formatUnits, concat } from "viem";
 import { Attribution } from "ox/erc8021";
 import { toast } from "sonner";
 import { insertSwapRecord } from "@/lib/supabase";
@@ -17,8 +17,13 @@ import type { SwapExecuteParams, SwapStatus } from "@/types/swap";
 import { DEX_ROUTERS } from "@/constants/dex-addresses";
 import { AERODROME_FACTORY } from "@/constants/dex-registry";
 
-// 🔧 Builder Code Attribution (B20 FUN approach)
+// 🔧 Builder Code Attribution
 const BUILDER_CODE_SUFFIX = Attribution.toDataSuffix({ codes: ["bc_92yf9czs"] }) as `0x${string}`;
+
+// Helper: Append builder code to transaction data
+function appendBuilderCode(data: `0x${string}`): `0x${string}` {
+  return concat([data, BUILDER_CODE_SUFFIX]);
+}
 
 const NATIVE_ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const WETH       = "0x4200000000000000000000000000000000000006" as const;
@@ -134,23 +139,34 @@ export function useSwapExecute(onSuccess?: () => void) {
   const [status,  setStatus]  = useState<SwapStatus>("idle");
   const [txHash,  setTxHash]  = useState<`0x${string}` | undefined>();
   const { writeContractAsync }   = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
   const queryClient = useQueryClient();
   // usePublicClient uses the wallet's connected provider — no CORS issues
   const walletClient = usePublicClient();
 
-  // 🔧 Helper: writeContract with builder code using dataSuffix parameter (B20 FUN approach)
+  // 🔧 Helper: writeContract with builder code (manual encoding for wagmi 2.14.3)
   async function writeWithBuilderCode(params: Parameters<typeof writeContractAsync>[0]) {
+    const data = encodeFunctionData({
+      abi: params.abi,
+      functionName: params.functionName as string,
+      args: params.args as readonly unknown[],
+    });
+    const dataWithBuilder = appendBuilderCode(data);
+    
     // Debug log
-    console.log("🔧 writeWithBuilderCode (dataSuffix approach):", {
+    console.log("🔧 writeWithBuilderCode:", {
       function: params.functionName,
       address: params.address,
+      originalData: data,
+      withBuilder: dataWithBuilder,
       builderSuffix: BUILDER_CODE_SUFFIX,
     });
     
-    // B20 FUN approach: use dataSuffix parameter directly
-    return writeContractAsync({
-      ...params,
-      dataSuffix: BUILDER_CODE_SUFFIX,
+    return sendTransactionAsync({
+      to: params.address,
+      data: dataWithBuilder,
+      value: params.value || 0n,
+      gas: params.gas,
     });
   }
 
