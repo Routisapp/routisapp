@@ -37,19 +37,13 @@ function UsdcBalanceDisplay({ address }: { address: `0x${string}` }) {
 
   return (
     <div 
-      className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-[#C9693A] bg-[#C9693A]/5"
-      style={{ minWidth: 140 }}
+      className="flex flex-col items-end gap-1 px-4 py-2 rounded-lg border-2 border-[#C9693A]"
+      style={{ minWidth: 120 }}
     >
-      <div className="flex flex-col items-end">
-        <span className="text-xs text-[--text-secondary] font-medium">USDC Balance</span>
-        <span className="text-base font-bold text-[#C9693A] tabular-nums">
-          {balanceNum.toFixed(2)}
-        </span>
-      </div>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9693A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 6v6l4 2"/>
-      </svg>
+      <span className="text-xs text-[--text-secondary] font-medium">USDC Balance</span>
+      <span className="text-lg font-bold text-[#C9693A] tabular-nums">
+        {balanceNum.toFixed(2)}
+      </span>
     </div>
   );
 }
